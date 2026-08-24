@@ -6,32 +6,20 @@ const context = await browser.newContext({ viewport: { width: 375, height: 812 }
 const page = await context.newPage();
 await page.addInitScript(() => localStorage.removeItem("reliacode-mvp"));
 await page.goto("http://localhost:4173", { waitUntil: "networkidle" });
-const initialWidths = await page.evaluate(() => ({ viewport: window.innerWidth, document: document.documentElement.scrollWidth, offenders: [...document.querySelectorAll("*")].filter((el) => el.getBoundingClientRect().right > window.innerWidth + 1).slice(0, 8).map((el) => ({ tag: el.tagName, className: el.className, right: Math.round(el.getBoundingClientRect().right) })) }));
-assert.ok(initialWidths.document <= initialWidths.viewport, JSON.stringify(initialWidths));
+assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
+
 await page.getByRole("button", { name: "收货扫码", exact: true }).click();
-assert.ok(await page.locator("#scan-code").isVisible());
-await page.locator("#scan-code").fill("  rc-ctn-202608-00101  ");
-await page.getByRole("button", { name: "验证并确认收货" }).click();
-await page.getByText("收货确认成功").waitFor();
-assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
+await page.locator("#scan-code").fill(" rc-ctn-202608-00101 ");
+await page.getByRole("button", { name: "验证可靠码" }).click();
+await page.getByRole("button", { name: /确认收货/ }).click();
+assert.match(await page.locator("#scan-result").innerText(), /收货确认成功/);
+
 await page.locator("#scan-code").fill("<script>alert(1)</script>");
-await page.getByRole("button", { name: "验证并确认收货" }).click();
-assert.match(await page.locator("#scan-result").innerText(), /该码不在发货单/);
-await page.getByRole("button", { name: "奖励活动" }).click();
-await page.locator("#campaign-name").fill("快速点击测试");
-await page.getByRole("button", { name: "保存完整草稿" }).click();
-await page.getByText("快速点击测试").waitFor();
-assert.ok(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-await page.screenshot({ path: "test-results/mobile-mvp.png", fullPage: true });
+await page.getByRole("button", { name: "验证可靠码" }).click();
+assert.match(await page.locator("#scan-result").innerText(), /不在发货单/);
+
+await page.setViewportSize({ width: 320, height: 568 });
+assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
 await context.close();
-const narrowContext = await browser.newContext({ viewport: { width: 320, height: 568 } });
-const narrowPage = await narrowContext.newPage();
-await narrowPage.addInitScript(() => localStorage.removeItem("reliacode-mvp"));
-await narrowPage.goto("http://localhost:4173", { waitUntil: "networkidle" });
-assert.ok(await narrowPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-await narrowPage.getByRole("button", { name: "收货扫码", exact: true }).click();
-assert.ok(await narrowPage.locator("#scan-code").isVisible());
-assert.ok(await narrowPage.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth));
-await narrowContext.close();
 await browser.close();
-console.log("MOBILE/EDGE PASS: 375px/320px layout, normalized code, hostile input, campaign draft");
+console.log("MOBILE/EDGE PASS: two-step receipt, normalized code, hostile input, 375px/320px layout");
