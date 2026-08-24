@@ -2,7 +2,7 @@
 
 ## Goal
 
-Allow a brand to reward approved distributors and stores for completing useful,
+Allow ReliaCode to reward approved distributors and stores for completing useful,
 verified traceability activities. The incentive is for a completed business
 process, not for opening a QR code.
 
@@ -53,7 +53,7 @@ rewardable in the MVP.
 
 | Record | Purpose |
 | --- | --- |
-| `Campaign` | Brand-owned budget, date range, eligible products and organizations |
+| `Campaign` | ReliaCode-owned budget, date range, eligible products and organizations |
 | `RewardRule` | Versioned trigger, reward amount, caps, verification and reversal rules |
 | `TraceEvent` | Immutable verified scan or workflow fact |
 | `RewardClaim` | Evaluation of one potential reward; pending, approved, rejected, accrued, settled, or reversed |
@@ -83,7 +83,7 @@ GPS and a QR code are risk signals, not conclusive proof of a real handover.
 
 ## Roles and separation of duties
 
-- Brand administrator: configures campaigns and rules, but cannot alter ledger entries.
+- ReliaCode operations administrator: configures campaigns and rules, but cannot alter ledger entries.
 - Channel/store operator: sees only its authorized organization and outlets.
 - Risk operator: reviews flagged claims and cannot settle payments.
 - Finance operator: settles approved batches and cannot approve its own adjustments.

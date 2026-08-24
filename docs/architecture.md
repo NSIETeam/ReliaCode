@@ -15,7 +15,7 @@ activity. See [the incentive domain design](domain/scan-incentive.md).
 
 | Object | Identity | Purpose |
 | --- | --- | --- |
-| Finished bag | SGTIN or brand-issued unique serial | Instance-level consumer pack identity |
+| Finished bag | SGTIN or ReliaCode-assigned unique serial | Instance-level consumer pack identity |
 | Production lot | Lot identifier | Batch, quality, date, and recall scope |
 | Carton | SSCC or unique logistics-unit ID | Parent for bag aggregation |
 | Location | GLN or controlled location ID | Factory, warehouse, distributor, or store |

@@ -6,7 +6,7 @@ Accepted
 
 ## Context
 
-Brands need to motivate channels and stores to perform real receiving and
+ReliaCode needs to motivate channels and stores to perform real receiving and
 inventory activities. A direct "scan equals payment" design is easy to game,
 and editing a trace event when a reward is disputed would corrupt the audit
 trail.

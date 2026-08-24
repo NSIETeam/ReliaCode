@@ -1,6 +1,6 @@
 # ReliaCode
 
-ReliaCode is a brand-operated traceability application for serialized pet-food packs.
+ReliaCode (可靠码) is an operator-managed traceability application for serialized pet-food packs.
 It records the lifecycle from individual bag to carton, distributor, and retail store.
 
 ## Scope
@@ -8,7 +8,7 @@ It records the lifecycle from individual bag to carton, distributor, and retail 
 - Assign a unique identity to each finished bag.
 - Bind bags to a uniquely identified carton at packing time.
 - Record shipping, receiving, unpacking, repacking, returns, and recall events.
-- Let brands configure auditable incentives for verified distributor and store
+- Let ReliaCode configure auditable incentives for verified distributor and store
   activities.
 - Publish GS1 EPCIS 2.0 events to an OpenEPCIS repository.
 
@@ -27,6 +27,7 @@ See [the architecture note](docs/architecture.md) and
 [ADR-0001](docs/adr/0001-openepcis-as-traceability-core.md).
 The initial incentive design is documented in
 [scan-incentive.md](docs/domain/scan-incentive.md).
+For industry review, see the Chinese [usage and reward model](docs/zh-CN/可靠码使用与奖励模式-行业评审稿.md).
 
 ## First acceptance scenario
 
