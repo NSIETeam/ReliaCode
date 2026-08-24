@@ -3,5 +3,14 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "scripts": { "dev": "node server.mjs", "start": "node server.mjs" }
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "test:e2e": "node tests/e2e.mjs",
+    "test:mobile": "node tests/mobile-and-edge.mjs",
+    "test": "npm run test:e2e && npm run test:mobile"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
 }
