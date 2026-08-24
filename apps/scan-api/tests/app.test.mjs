@@ -10,7 +10,10 @@ const config = loadConfig({
   CORS_ORIGINS:"http://localhost:4173",
   LOG_LEVEL:"silent"
 });
-const db = { query: async (sql) => ({ rowCount:1, rows:[sql.includes("SELECT EXISTS") ? { active:true } : { "?column?":1 }] }) };
+const db = { query: async (sql) => ({
+  rowCount:1,
+  rows:[sql.includes("schema_migrations") ? { current:true } : sql.includes("SELECT EXISTS") ? { active:true } : { "?column?":1 }]
+}) };
 
 test("health endpoints do not require authentication", async (t) => {
   const app = await buildApp({ config, db });
@@ -19,6 +22,16 @@ test("health endpoints do not require authentication", async (t) => {
   const ready = await app.inject({ method:"GET", url:"/health/ready" });
   assert.equal(live.statusCode, 200);
   assert.equal(ready.statusCode, 200);
+  assert.equal(ready.json().schemaVersion, "003_public_verification.sql");
+});
+
+test("readiness fails when the database schema is outdated", async (t) => {
+  const outdatedDb = { query:async () => ({ rowCount:1,rows:[{ current:false }] }) };
+  const app = await buildApp({ config,db:outdatedDb });
+  t.after(() => app.close());
+  const response = await app.inject({ method:"GET",url:"/health/ready" });
+  assert.equal(response.statusCode,503);
+  assert.equal(response.json().reason,"schema_outdated");
 });
 
 test("business routes reject anonymous requests", async (t) => {

@@ -1,0 +1,46 @@
+name: reliacode-production
+
+services:
+  migrate:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    command: ["node", "src/migrate.mjs"]
+    environment: &api_environment
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/database_url
+      DATABASE_SSL: "true"
+      AUTH_MODE: oidc
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?OIDC_ISSUER_URL is required}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-reliacode-api}
+      CORS_ORIGINS: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
+      TRUST_PROXY: "true"
+      OPEN_EPCIS_BASE_URL: ${OPEN_EPCIS_BASE_URL:?OPEN_EPCIS_BASE_URL is required}
+    secrets: [database_url]
+    restart: "no"
+
+  api:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    environment: *api_environment
+    secrets: [database_url]
+    ports: ["4180:4180"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4180/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  outbox-worker:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    command: ["node", "src/outbox-worker.mjs"]
+    environment: *api_environment
+    secrets: [database_url]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+secrets:
+  database_url:
+    file: ./secrets/database_url.txt

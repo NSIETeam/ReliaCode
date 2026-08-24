@@ -6,6 +6,7 @@ import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
 import { createAuthenticator } from "./auth.mjs";
 import { registerRoutes } from "./routes.mjs";
+import { REQUIRED_SCHEMA_VERSION } from "./schema-version.mjs";
 
 export async function buildApp({ config, db }) {
   const app = Fastify({
@@ -54,9 +55,23 @@ export async function buildApp({ config, db }) {
     return payload;
   });
 
-  app.get("/health/live", async () => ({ status:"ok" }));
+  app.get("/health/live", async () => ({
+    status:"ok",
+    service:"reliacode-scan-api",
+    version:config.APP_VERSION,
+    revision:config.GIT_SHA
+  }));
   app.get("/health/ready", async (_request, reply) => {
-    try { await db.query("SELECT 1"); return { status:"ready" }; }
+    try {
+      const migration = await db.query(
+        "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1) AS current",
+        [REQUIRED_SCHEMA_VERSION]
+      );
+      if (!migration.rows[0]?.current) {
+        return reply.code(503).send({ status:"not_ready", reason:"schema_outdated" });
+      }
+      return { status:"ready", schemaVersion:REQUIRED_SCHEMA_VERSION };
+    }
     catch { return reply.code(503).send({ status:"not_ready" }); }
   });
   registerRoutes(app, { db });

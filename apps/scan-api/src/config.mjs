@@ -20,7 +20,9 @@ const schema = z.object({
   CORS_ORIGINS: z.string().default("http://localhost:4173"),
   TRUST_PROXY: boolean.default(false),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
-  OPEN_EPCIS_BASE_URL: z.string().url().optional()
+  OPEN_EPCIS_BASE_URL: z.string().url().optional(),
+  APP_VERSION: z.string().min(1).max(100).default("development"),
+  GIT_SHA: z.string().min(1).max(100).default("unknown")
 });
 
 export function loadConfig(env = process.env) {
