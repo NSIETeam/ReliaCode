@@ -3,7 +3,7 @@ name: reliacode-production
 services:
   migrate:
     image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
-    command: ["node", "src/migrate.mjs"]
+    command: ["src/migrate.mjs"]
     environment: &api_environment
       NODE_ENV: production
       DATABASE_URL_FILE: /run/secrets/database_url
@@ -25,7 +25,7 @@ services:
     depends_on:
       migrate: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4180/health/ready"]
+      test: ["CMD", "/nodejs/bin/node", "src/healthcheck.mjs"]
       interval: 10s
       timeout: 3s
       retries: 12
@@ -34,7 +34,7 @@ services:
 
   outbox-worker:
     image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
-    command: ["node", "src/outbox-worker.mjs"]
+    command: ["src/outbox-worker.mjs"]
     environment: *api_environment
     secrets: [database_url]
     depends_on:

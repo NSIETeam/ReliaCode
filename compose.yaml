@@ -27,7 +27,7 @@ services:
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:-reliacode-api}
       CORS_ORIGINS: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
       OPEN_EPCIS_BASE_URL: ${OPEN_EPCIS_BASE_URL:-http://openepcis:8080}
-    command: ["node", "src/migrate.mjs"]
+    command: ["src/migrate.mjs"]
     secrets: [database_url]
     depends_on:
       postgres: { condition: service_healthy }
@@ -42,7 +42,7 @@ services:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://localhost:4180/health/ready"]
+      test: ["CMD", "/nodejs/bin/node", "src/healthcheck.mjs"]
       interval: 10s
       timeout: 3s
       retries: 10
@@ -53,7 +53,7 @@ services:
     build: ./apps/scan-api
     environment: *api_environment
     secrets: [database_url]
-    command: ["node", "src/outbox-worker.mjs"]
+    command: ["src/outbox-worker.mjs"]
     depends_on:
       postgres: { condition: service_healthy }
       migrate: { condition: service_completed_successfully }
