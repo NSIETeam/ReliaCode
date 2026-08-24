@@ -13,6 +13,9 @@ function decodeMatrix(matrix) {
 
 const {browser,page}=await openApp();
 assert.equal(await page.locator("#onboarding").isVisible(),true);
+assert.deepEqual(await page.evaluate(()=>({encoder:typeof qrcode,decoder:typeof jsQR})),{encoder:"function",decoder:"function"});
+assert.equal(await page.evaluate(()=>csvCell("=HYPERLINK(1)")),"\"'=HYPERLINK(1)\"");
+assert.deepEqual(await page.evaluate(()=>[validGtin("06912345678902"),validGtin("06912345678901")]),[true,false]);
 assert.equal(await page.locator("body").innerText().then((text)=>/RC-(ITM|CTN)-\d/.test(text)),false,"first run must not expose built-in codes");
 await initialize(page);
 let stored=await page.evaluate(()=>JSON.parse(localStorage.getItem("reliacode-workspace-v1")));
@@ -28,8 +31,15 @@ assert.equal(stored.products.length,1);
 assert.equal(Object.keys(stored.objects).length,3);
 assert.equal(new Set(Object.keys(stored.objects)).size,3);
 const firstCode=Object.keys(stored.objects)[0];
-const matrix=await page.evaluate((code)=>qrMatrix(code),firstCode);
-assert.equal(decodeMatrix(matrix)?.data,firstCode,"exported QR matrix must decode to the exact reliable code");
+const firstObject=stored.objects[firstCode];
+const expectedVerificationUrl=`http://localhost:4173/?verify=${firstObject.publicId}`;
+const matrix=await page.evaluate((code)=>qrMatrix(verificationUrl(object(code))),firstCode);
+assert.equal(decodeMatrix(matrix)?.data,expectedVerificationUrl,"exported QR matrix must decode to the public verification URL");
+const publicContext=await browser.newContext();
+const publicPage=await publicContext.newPage();
+await publicPage.goto(expectedVerificationUrl,{waitUntil:"networkidle"});
+assert.match(await publicPage.locator("#public-verification-result").innerText(),/尚未连接生产验证服务/);
+await publicContext.close();
 const downloadPromise=page.waitForEvent("download");
 await page.locator(`[data-labels="${stored.codeBatches[0].id}"]`).click();
 const labelDownload=await downloadPromise;
@@ -39,6 +49,12 @@ let labelHtml="";for await(const chunk of labelStream)labelHtml+=chunk.toString(
 assert.equal((labelHtml.match(/class="label"/g)||[]).length,3);
 assert.match(labelHtml,/<svg class="qr"/);
 assert.ok(labelHtml.includes(firstCode));
+assert.ok(labelHtml.includes(`?verify=${firstObject.publicId}`));
+
+await page.goto(expectedVerificationUrl,{waitUntil:"networkidle"});
+assert.equal(await page.locator("#verify").evaluate((node)=>node.classList.contains("active")),true);
+assert.match(await page.locator("#verify-result").innerText(),/产品身份有效/);
+assert.equal(await page.locator('[data-camera-target="verify-code"]').isVisible(),true);
 
 await page.locator('[data-view="verify"]').click();
 await page.locator("#verify-code").fill(firstCode);

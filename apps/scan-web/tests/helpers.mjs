@@ -21,6 +21,6 @@ export async function addProduct(page, suffix=Date.now().toString(36)) {
   await page.locator('[data-view="codes"]').click();
   await page.locator('#product-form [name="name"]').fill(`Product-${suffix}`);
   await page.locator('#product-form [name="sku"]').fill(`SKU-${suffix}`);
-  await page.locator('#product-form [name="gtin"]').fill("06912345678901");
+  await page.locator('#product-form [name="gtin"]').fill("06912345678902");
   await page.getByRole("button",{name:"保存产品"}).click();
 }

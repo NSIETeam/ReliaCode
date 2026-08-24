@@ -27,4 +27,6 @@ The vendored source retains its upstream copyright and license header.
 - Upstream: <https://github.com/cozmo/jsQR>
 - Version: 1.4.0
 - License: Apache License 2.0
-- Use: development-only scan verification for generated QR matrices.
+- Use: browser camera-decoding fallback and automated scan verification for
+  generated QR matrices. The vendored distribution and Apache-2.0 license are
+  retained under `apps/scan-web/vendor/`.

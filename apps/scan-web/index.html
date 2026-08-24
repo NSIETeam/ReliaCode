@@ -73,7 +73,16 @@
       <p class="agent-disclaimer">Agent 使用当前账号授权的业务能力；不会自动切换身份或绕过审批。</p>
     </aside>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="camera-modal" class="camera-modal" hidden>
+      <section class="camera-card" role="dialog" aria-modal="true" aria-labelledby="camera-title">
+        <header><div><h2 id="camera-title">扫描可靠码</h2><p id="camera-status">正在启动摄像头…</p></div><button id="camera-close" class="icon-button" type="button" aria-label="关闭摄像头"></button></header>
+        <div class="camera-viewport"><video id="camera-video" playsinline muted></video><span class="camera-frame" aria-hidden="true"></span></div>
+        <p>将二维码完整放入取景框；识别成功后会自动关闭。摄像头图像不会上传。</p>
+      </section>
+    </div>
+    <script src="runtime-config.js"></script>
     <script src="vendor/qrcode.js"></script>
+    <script src="vendor/jsQR.js"></script>
     <script src="app.js"></script>
   </body>
 </html>

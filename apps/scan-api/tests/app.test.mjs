@@ -29,6 +29,26 @@ test("business routes reject anonymous requests", async (t) => {
   assert.equal(response.json().code, "UNAUTHORIZED");
 });
 
+test("public verification is anonymous and returns only consumer-safe fields", async (t) => {
+  const publicId="c2d3848d-6fe7-4c86-91ed-a34b863c83af";
+  const publicDb={ query:async (sql) => {
+    if(sql.includes("FROM serialized_objects")) return { rowCount:1,rows:[{ id:"internal-object",public_id:publicId,level:"ITEM",lot:"LOT-01",status:"RECEIVED",created_at:"2026-08-24T00:00:00.000Z",gtin:"06912345678902",product_name:"产品" }] };
+    if(sql.includes("FROM trace_events")) return { rowCount:1,rows:[{ event_type:"RECEIVING_STORE",event_time:"2026-08-24T08:00:00.000Z",verification_status:"VERIFIED",organization_id:"must-not-leak" }] };
+    throw new Error(`Unexpected SQL: ${sql}`);
+  }};
+  const app=await buildApp({config,db:publicDb});
+  t.after(()=>app.close());
+  const response=await app.inject({method:"GET",url:`/api/public/v1/objects/${publicId}`});
+  assert.equal(response.statusCode,200);
+  assert.equal(response.headers["cache-control"],"public, max-age=60, stale-while-revalidate=300");
+  const body=response.json();
+  assert.equal(body.verified,true);
+  assert.equal(body.object.publicId,publicId);
+  assert.equal(body.events[0].type,"RECEIVING_STORE");
+  assert.equal(JSON.stringify(body).includes("internal-object"),false);
+  assert.equal(JSON.stringify(body).includes("must-not-leak"),false);
+});
+
 test("development principal is normalized and authorized", async (t) => {
   const app = await buildApp({ config, db });
   t.after(() => app.close());

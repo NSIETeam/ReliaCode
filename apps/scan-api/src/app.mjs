@@ -34,7 +34,7 @@ export async function buildApp({ config, db }) {
   const authenticate = await createAuthenticator(config);
   app.decorateRequest("principal", null);
   app.addHook("onRequest", async (request, reply) => {
-    if (request.url === "/health/live" || request.url === "/health/ready") return;
+    if (request.url === "/health/live" || request.url === "/health/ready" || request.url.startsWith("/api/public/")) return;
     try { request.principal = await authenticate(request); } catch (error) {
       request.log.warn({ error: error.message }, "authentication failed");
     }
@@ -50,7 +50,7 @@ export async function buildApp({ config, db }) {
   });
   app.addHook("onSend", async (request, reply, payload) => {
     reply.header("x-request-id", request.id);
-    reply.header("cache-control", request.method === "GET" ? "private, no-store" : "no-store");
+    reply.header("cache-control", request.url.startsWith("/api/public/") ? "public, max-age=60, stale-while-revalidate=300" : request.method === "GET" ? "private, no-store" : "no-store");
     return payload;
   });
 

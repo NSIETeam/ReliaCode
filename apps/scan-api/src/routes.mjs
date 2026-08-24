@@ -74,6 +74,30 @@ async function createRewardForEvent(client, { request, event, object, idempotenc
 }
 
 export function registerRoutes(app, { db }) {
+  app.get("/api/public/v1/objects/:publicId", async (request, reply) => {
+    const publicId = z.string().uuid().parse(request.params.publicId);
+    const result = await db.query(
+      `SELECT so.id,so.public_id,so.level,so.lot,so.status,so.created_at,p.gtin,p.name product_name
+       FROM serialized_objects so JOIN products p ON p.id=so.product_id
+       WHERE so.public_id=$1 AND p.status='ACTIVE'`,
+      [publicId]
+    );
+    if (!result.rowCount) return reply.code(404).send({ code:"PUBLIC_OBJECT_NOT_FOUND", message:"Reliable code not found" });
+    const object = result.rows[0];
+    const events = await db.query(
+      `SELECT event_type,event_time,verification_status
+       FROM trace_events WHERE object_id=$1 AND verification_status='VERIFIED'
+       ORDER BY event_time DESC,record_time DESC LIMIT 20`,
+      [object.id]
+    );
+    return {
+      verified:true,
+      product:{ name:object.product_name, gtin:object.gtin },
+      object:{ publicId:object.public_id, level:object.level, lot:object.lot, status:object.status, commissionedAt:object.created_at },
+      events:events.rows.map((event) => ({ type:event.event_type, time:event.event_time }))
+    };
+  });
+
   app.get("/api/v1/me", async (request) => ({
     id: request.principal.id,
     name: request.principal.name,
@@ -87,7 +111,7 @@ export function registerRoutes(app, { db }) {
     requireCapability(request.principal, "objects:read");
     const code = z.string().trim().min(6).max(200).transform((value) => value.toUpperCase()).parse(request.params.code);
     const result = await db.query(
-      `SELECT so.id,so.code,so.level,so.lot,so.status,so.parent_id,so.current_organization_id,p.sku,p.gtin,p.name product_name,
+      `SELECT so.id,so.public_id,so.code,so.level,so.lot,so.status,so.parent_id,so.current_organization_id,p.sku,p.gtin,p.name product_name,
               o.name current_organization
        FROM serialized_objects so JOIN products p ON p.id=so.product_id
        LEFT JOIN organizations o ON o.id=so.current_organization_id
