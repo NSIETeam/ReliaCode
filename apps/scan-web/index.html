@@ -1,4 +1,38 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>ReliaCode 可靠码 | 运营端 MVP</title><link rel="stylesheet" href="styles.css" /></head>
-<body><div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-mark">R</span><span>ReliaCode<small>可靠码 · 运营端</small></span></div><nav><button class="nav-link active" data-view="dashboard">总览</button><button class="nav-link" data-view="receive">扫码收货</button><button class="nav-link" data-view="campaigns">奖励活动</button><button class="nav-link" data-view="ledger">奖励账本</button><button class="nav-link" data-view="risk">风控待审 <span class="nav-badge">2</span></button></nav><div class="sidebar-note"><b>演示环境</b><br />数据仅保存在当前浏览器。真实支付、登录与 EPCIS 接入尚未启用。</div></aside>
-<main><header class="topbar"><div><p class="eyebrow">PET FOOD TRACEABILITY</p><h1 id="page-title">运营总览</h1></div><div class="identity"><span class="status-dot"></span><span>门店收货员 · 上海虹桥店</span><button id="reset" class="link-button">重置演示</button></div></header><section id="dashboard" class="view active"></section><section id="receive" class="view"></section><section id="campaigns" class="view"></section><section id="ledger" class="view"></section><section id="risk" class="view"></section></main></div><div id="toast" class="toast"></div><script src="app.js"></script></body></html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ReliaCode（可靠码）运营端</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="design.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="主要导航">
+        <div class="brand"><span class="brand-mark">R</span><span>ReliaCode<small>可靠码 · 流转运营端</small></span></div>
+        <nav>
+          <button class="nav-link active" data-view="dashboard">工作台</button>
+          <button class="nav-link" data-view="receive">收货扫码</button>
+          <button class="nav-link" data-view="campaigns">奖励活动</button>
+          <button class="nav-link" data-view="ledger">奖励账本</button>
+          <button class="nav-link" data-view="risk">风险处置 <span id="risk-badge" class="nav-badge">2</span></button>
+        </nav>
+        <div class="sidebar-note"><b>本地演示环境</b><br />数据保存在当前浏览器；未连接真实账户、支付或 EPCIS 服务。</div>
+      </aside>
+      <main>
+        <header class="topbar">
+          <div><p class="eyebrow">RELIA CODE · PET FOOD TRACEABILITY</p><h1 id="page-title">工作台</h1></div>
+          <div class="identity"><span class="status-dot"></span><span>上海虹桥宠物生活馆 · 门店收货员</span><span id="updated-at" class="updated-at"></span><button id="reset" class="link-button">重置本地数据</button></div>
+        </header>
+        <section id="dashboard" class="view active"></section>
+        <section id="receive" class="view"></section>
+        <section id="campaigns" class="view"></section>
+        <section id="ledger" class="view"></section>
+        <section id="risk" class="view"></section>
+      </main>
+    </div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
