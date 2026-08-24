@@ -22,7 +22,7 @@ jobs:
           cache-dependency-path: package-lock.json
       - run: npm ci
       - run: npm test --workspace @reliacode/scan-api
-      - run: npx playwright install --with-deps chromium
+      - run: npm exec --workspace reliacode-operations-mvp -- playwright install --with-deps chromium
       - run: |
           npm run dev --workspace reliacode-operations-mvp > /tmp/reliacode-web.log 2>&1 &
           for i in {1..20}; do curl -fsS http://localhost:4173/health/live && exit 0; sleep 1; done

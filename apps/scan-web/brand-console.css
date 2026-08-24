@@ -440,7 +440,7 @@
 
 @media (max-width: 767px) {
   .topbar { min-height: 60px; margin-bottom: 14px; }
-  .topbar-title { display: block !important; }
+  .topbar-title { display: none !important; min-width: 0; }
   .topbar-title .eyebrow, .topbar-title h1 { display: none; }
   .topbar::before { display: block !important; content: 'ReliaCode 可靠码'; color: var(--ink); font-size: 16px; font-weight: 700; }
   .environment-pill, .account-switcher { display: none; }
