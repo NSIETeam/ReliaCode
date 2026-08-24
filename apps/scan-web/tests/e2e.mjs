@@ -1,5 +1,15 @@
 import assert from "node:assert/strict";
+import jsQR from "jsqr";
 import { addProduct, initialize, openApp } from "./helpers.mjs";
+
+function decodeMatrix(matrix) {
+  const quiet=4,scale=8,modules=matrix.length+quiet*2,size=modules*scale,pixels=new Uint8ClampedArray(size*size*4).fill(255);
+  for(let row=0;row<matrix.length;row++)for(let column=0;column<matrix.length;column++)if(matrix[row][column])for(let y=0;y<scale;y++)for(let x=0;x<scale;x++){
+    const offset=(((row+quiet)*scale+y)*size+(column+quiet)*scale+x)*4;
+    pixels[offset]=pixels[offset+1]=pixels[offset+2]=0;
+  }
+  return jsQR(pixels,size,size,{inversionAttempts:"dontInvert"});
+}
 
 const {browser,page}=await openApp();
 assert.equal(await page.locator("#onboarding").isVisible(),true);
@@ -18,6 +28,17 @@ assert.equal(stored.products.length,1);
 assert.equal(Object.keys(stored.objects).length,3);
 assert.equal(new Set(Object.keys(stored.objects)).size,3);
 const firstCode=Object.keys(stored.objects)[0];
+const matrix=await page.evaluate((code)=>qrMatrix(code),firstCode);
+assert.equal(decodeMatrix(matrix)?.data,firstCode,"exported QR matrix must decode to the exact reliable code");
+const downloadPromise=page.waitForEvent("download");
+await page.locator(`[data-labels="${stored.codeBatches[0].id}"]`).click();
+const labelDownload=await downloadPromise;
+assert.match(labelDownload.suggestedFilename(),/^reliacode-labels-.*\.html$/);
+const labelStream=await labelDownload.createReadStream();
+let labelHtml="";for await(const chunk of labelStream)labelHtml+=chunk.toString("utf8");
+assert.equal((labelHtml.match(/class="label"/g)||[]).length,3);
+assert.match(labelHtml,/<svg class="qr"/);
+assert.ok(labelHtml.includes(firstCode));
 
 await page.locator('[data-view="verify"]').click();
 await page.locator("#verify-code").fill(firstCode);

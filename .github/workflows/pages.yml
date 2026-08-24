@@ -41,6 +41,7 @@ jobs:
         run: |
           mkdir -p dist
           cp apps/scan-web/index.html apps/scan-web/app.js apps/scan-web/*.css apps/scan-web/*.svg dist/
+          cp -R apps/scan-web/vendor dist/vendor
           touch dist/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

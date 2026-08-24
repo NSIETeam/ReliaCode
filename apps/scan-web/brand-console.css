@@ -323,6 +323,8 @@
   border-top: 1px solid var(--line);
 }
 .code-batch-row.table-head { border: 0; border-radius: 6px; }
+.batch-actions { display: grid; gap: 4px; align-items: center; }
+.batch-actions .row-action { justify-content: flex-start; white-space: nowrap; }
 
 .movement-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); margin-bottom: 20px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
 .movement-summary .metric-card { border-right: 1px solid var(--line); }
