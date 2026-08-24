@@ -1,4 +1,16 @@
-# Scan web
+# ReliaCode（可靠码）运营端 MVP
 
-Reserved for the mobile-friendly operator workflow: commission, pack, ship,
-receive, unpack, repack, return, and recall verification.
+本地演示包含：收货扫码校验、箱级首次收货奖励、重复计奖拦截、活动草稿、奖励账本和风控待审。
+
+```powershell
+cd apps/scan-web
+npm run dev
+```
+
+打开 `http://localhost:4173`。无需安装依赖。
+
+- `RC-CTN-202608-00101`：正常收货，产生 +500 积分冻结奖励。
+- 再次扫描同一码：拦截重复计奖。
+- `RC-CTN-202608-00092`：触发跨组织重复风险，不产生奖励。
+
+数据仅存于浏览器。此 MVP 不含真实登录、支付、摄像头扫码、数据库或 OpenEPCIS 服务。

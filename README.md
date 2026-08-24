@@ -44,3 +44,9 @@ separate Apache-2.0 dependency. See [third-party notices](THIRD_PARTY_NOTICES.md
 
 This repository is intentionally an initial scaffold: it contains no production
 credentials, customer data, or copied OpenEPCIS source.
+
+## Runnable MVP
+
+The operations prototype is in [apps/scan-web](apps/scan-web). Run `npm run dev`
+from that folder and open `http://localhost:4173` to demonstrate verified receipt
+scanning, incentive campaigns, ledger entries, and risk review.
