@@ -1,0 +1,12 @@
+{
+  "name": "reliacode",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": ["apps/scan-api", "apps/scan-web"],
+  "scripts": {
+    "test": "npm test --workspace @reliacode/scan-api && npm test --workspace reliacode-operations-mvp",
+    "test:api": "npm test --workspace @reliacode/scan-api",
+    "test:web": "npm test --workspace reliacode-operations-mvp"
+  },
+  "engines": { "node": ">=22.0.0" }
+}

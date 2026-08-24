@@ -42,11 +42,21 @@ For industry review, see the Chinese [usage and reward model](docs/zh-CN/可靠�
 ReliaCode-owned files are licensed under [Apache-2.0](LICENSE). OpenEPCIS is a
 separate Apache-2.0 dependency. See [third-party notices](THIRD_PARTY_NOTICES.md).
 
-This repository is intentionally an initial scaffold: it contains no production
-credentials, customer data, or copied OpenEPCIS source.
+This repository contains a production-oriented API baseline and a browser-based
+operations prototype. It contains no production credentials or customer data.
+The API uses PostgreSQL transactions, OIDC identities, tenant-scoped RBAC,
+idempotent commands, append-only trace/ledger/audit records, and an outbox for
+OpenEPCIS delivery. See [production readiness](docs/production-readiness.md) and
+the [operations runbook](docs/operations-runbook.md) before any deployment.
 
 ## Runnable MVP
 
-The operations prototype is in [apps/scan-web](apps/scan-web). Run `npm run dev`
-from that folder and open `http://localhost:4173` to demonstrate verified receipt
-scanning, incentive campaigns, ledger entries, and risk review.
+The standalone browser workspace is in [apps/scan-web](apps/scan-web). Run
+`npm run dev` from that folder and open `http://localhost:4173`, or use the
+[GitHub Pages build](https://nsieteam.github.io/ReliaCode/). It ships with no
+brand, product, code, event, campaign, reward, risk, or account records. The
+first user creates an empty workspace and can export/import a JSON backup file.
+
+The browser-local workspace is not the production data source. Production writes
+must use [apps/scan-api](apps/scan-api); local identity switching and data reset
+must be disabled when the OIDC-backed frontend integration is enabled.

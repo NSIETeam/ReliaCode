@@ -4,34 +4,74 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ReliaCode（可靠码）运营端</title>
+    <link rel="icon" type="image/svg+xml" href="favicon.svg" />
     <link rel="stylesheet" href="styles.css" />
     <link rel="stylesheet" href="design.css" />
+    <link rel="stylesheet" href="figma-redesign.css" />
+    <link rel="stylesheet" href="brand-console.css" />
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar" aria-label="主要导航">
-        <div class="brand"><span class="brand-mark">R</span><span>ReliaCode<small>可靠码 · 流转运营端</small></span></div>
-        <nav>
-          <button class="nav-link active" data-view="dashboard">工作台</button>
-          <button class="nav-link" data-view="receive">收货扫码</button>
-          <button class="nav-link" data-view="campaigns">奖励活动</button>
-          <button class="nav-link" data-view="ledger">奖励账本</button>
-          <button class="nav-link" data-view="risk">风险处置 <span id="risk-badge" class="nav-badge">2</span></button>
+        <div class="brand">
+          <span class="brand-mark" id="brand-logo" aria-hidden="true"></span>
+          <span>ReliaCode<small>可靠码 · 品牌与流转运营端</small></span>
+        </div>
+        <nav id="main-nav">
+          <p class="nav-group brand-only">品牌管理</p>
+          <button class="nav-link active" data-view="dashboard" data-icon="dashboard"><span>运营总览</span></button>
+          <button class="nav-link brand-only" data-view="codes" data-icon="codes"><span>批量生码</span></button>
+          <button class="nav-link brand-only" data-view="movement" data-icon="movement"><span>产品动向</span></button>
+          <button class="nav-link" data-view="verify" data-icon="verify"><span>扫码验证</span></button>
+          <p class="nav-group field-only">现场作业</p>
+          <button class="nav-link" data-view="receive" data-icon="scan"><span>业务扫码</span></button>
+          <p class="nav-group brand-only">激励与治理</p>
+          <button class="nav-link brand-only" data-view="campaigns" data-icon="campaign"><span>奖励活动</span></button>
+          <button class="nav-link brand-only" data-view="ledger" data-icon="ledger"><span>奖励账本</span></button>
+          <button class="nav-link brand-only" data-view="risk" data-icon="risk"><span>风险处置</span><span id="risk-badge" class="nav-badge">2</span></button>
         </nav>
-        <div class="sidebar-note"><b>本地演示环境</b><br />数据保存在当前浏览器；未连接真实账户、支付或 EPCIS 服务。</div>
+        <div class="sidebar-note"><b>本地工作区</b><br />首次打开后创建品牌工作区，不包含预置业务数据。</div>
       </aside>
       <main>
         <header class="topbar">
-          <div><p class="eyebrow">RELIA CODE · PET FOOD TRACEABILITY</p><h1 id="page-title">工作台</h1></div>
-          <div class="identity"><span class="status-dot"></span><span>上海虹桥宠物生活馆 · 门店收货员</span><span id="updated-at" class="updated-at"></span><button id="reset" class="link-button">重置本地数据</button></div>
+          <div class="topbar-title"><p class="eyebrow" id="breadcrumb">品牌管理 / 运营总览</p><h1 id="page-title">运营总览</h1></div>
+          <div class="identity">
+            <span class="environment-pill">本地优先版</span>
+            <label class="account-switcher">当前账号
+              <select id="account-select" aria-label="切换工作账号"></select>
+            </label>
+            <span id="device-summary" class="device-summary"></span>
+            <span id="updated-at" class="updated-at"></span>
+            <button id="agent-toggle" class="agent-toggle" aria-label="打开 Agent 操作中心"></button>
+            <button id="reset" class="icon-button" aria-label="清除本地工作区" title="清除本地工作区"></button>
+          </div>
         </header>
         <section id="dashboard" class="view active"></section>
+        <section id="codes" class="view"></section>
+        <section id="movement" class="view"></section>
+        <section id="verify" class="view"></section>
         <section id="receive" class="view"></section>
         <section id="campaigns" class="view"></section>
         <section id="ledger" class="view"></section>
         <section id="risk" class="view"></section>
       </main>
     </div>
+    <div id="agent-backdrop" class="agent-backdrop" hidden></div>
+    <aside id="agent-drawer" class="agent-drawer" aria-hidden="true" aria-label="Agent 操作中心">
+      <header class="agent-header">
+        <div class="agent-heading"><span id="agent-mark" class="agent-mark"></span><div><b>ReliaCode Agent</b><small>继承当前账号权限</small></div></div>
+        <button id="agent-close" class="icon-button" aria-label="关闭 Agent 操作中心"></button>
+      </header>
+      <div id="agent-context" class="agent-context"></div>
+      <div id="agent-messages" class="agent-messages" aria-live="polite"></div>
+      <div id="agent-quick-actions" class="agent-quick-actions"></div>
+      <div id="agent-pending" class="agent-pending" hidden></div>
+      <form id="agent-form" class="agent-form">
+        <input id="agent-command" autocomplete="off" placeholder="描述要完成的操作…" aria-label="Agent 操作指令" />
+        <button id="agent-send" type="submit" class="agent-send" aria-label="发送指令"></button>
+      </form>
+      <p class="agent-disclaimer">Agent 使用当前账号授权的业务能力；不会自动切换身份或绕过审批。</p>
+    </aside>
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
     <script src="app.js"></script>
   </body>

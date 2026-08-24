@@ -1,0 +1,83 @@
+name: reliacode
+services:
+  postgres:
+    image: postgres:16.4-alpine
+    environment:
+      POSTGRES_DB: reliacode
+      POSTGRES_USER: reliacode
+      POSTGRES_PASSWORD_FILE: /run/secrets/postgres_password
+    secrets: [postgres_password]
+    volumes: [reliacode_postgres:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reliacode -d reliacode"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    restart: unless-stopped
+    networks: [backend]
+
+  migrate:
+    build: ./apps/scan-api
+    environment: &api_environment
+      NODE_ENV: production
+      DATABASE_URL_FILE: /run/secrets/database_url
+      DATABASE_SSL: "false"
+      AUTH_MODE: oidc
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?OIDC_ISSUER_URL is required}
+      OIDC_AUDIENCE: ${OIDC_AUDIENCE:-reliacode-api}
+      CORS_ORIGINS: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
+      OPEN_EPCIS_BASE_URL: ${OPEN_EPCIS_BASE_URL:-http://openepcis:8080}
+    command: ["node", "src/migrate.mjs"]
+    secrets: [database_url]
+    depends_on:
+      postgres: { condition: service_healthy }
+    restart: "no"
+    networks: [backend]
+
+  api:
+    build: ./apps/scan-api
+    environment: *api_environment
+    secrets: [database_url]
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:4180/health/ready"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+    networks: [backend]
+
+  outbox-worker:
+    build: ./apps/scan-api
+    environment: *api_environment
+    secrets: [database_url]
+    command: ["node", "src/outbox-worker.mjs"]
+    depends_on:
+      postgres: { condition: service_healthy }
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+    networks: [backend]
+
+  web:
+    build: ./apps/scan-web
+    environment:
+      RELIACODE_API_URL: http://api:4180
+    ports: ["4173:4173"]
+    depends_on:
+      api: { condition: service_healthy }
+    restart: unless-stopped
+    networks: [frontend, backend]
+
+secrets:
+  postgres_password:
+    file: ./secrets/postgres_password.txt
+  database_url:
+    file: ./secrets/database_url.txt
+volumes:
+  reliacode_postgres:
+networks:
+  frontend:
+  backend:
+    internal: true

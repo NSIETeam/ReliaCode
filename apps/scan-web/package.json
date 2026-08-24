@@ -8,7 +8,8 @@
     "start": "node server.mjs",
     "test:e2e": "node tests/e2e.mjs",
     "test:mobile": "node tests/mobile-and-edge.mjs",
-    "test": "npm run test:e2e && npm run test:mobile"
+    "test:agent": "node tests/agent.mjs",
+    "test": "npm run test:e2e && npm run test:mobile && npm run test:agent"
   },
   "devDependencies": {
     "playwright": "^1.62.1"

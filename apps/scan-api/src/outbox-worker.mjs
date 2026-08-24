@@ -1,0 +1,55 @@
+import { loadConfig } from "./config.mjs";
+import { createDatabase } from "./db.mjs";
+import { toEpcisDocument } from "./epcis.mjs";
+
+const config = loadConfig();
+if (!config.OPEN_EPCIS_BASE_URL) throw new Error("OPEN_EPCIS_BASE_URL is required for the outbox worker");
+const db = createDatabase(config);
+let stopping = false;
+
+async function claim() {
+  return db.transaction(async (client) => {
+    const selected = await client.query(
+      `SELECT * FROM event_outbox WHERE processed_at IS NULL AND available_at<=now()
+       AND (locked_at IS NULL OR locked_at<now()-interval '5 minutes') ORDER BY created_at LIMIT 1 FOR UPDATE SKIP LOCKED`
+    );
+    if (!selected.rowCount) return null;
+    await client.query("UPDATE event_outbox SET locked_at=now() WHERE id=$1", [selected.rows[0].id]);
+    return selected.rows[0];
+  });
+}
+
+async function processOne(row) {
+  const document = toEpcisDocument(row.payload);
+  if (!document) {
+    await db.query("UPDATE event_outbox SET processed_at=now(),locked_at=NULL WHERE id=$1", [row.id]);
+    return;
+  }
+  try {
+    const response = await fetch(new URL("epcis/capture", `${config.OPEN_EPCIS_BASE_URL.replace(/\/$/, "")}/`), {
+      method:"POST",
+      headers:{ "content-type":"application/json", "x-reliacode-outbox-id":row.id },
+      body:JSON.stringify(document),
+      signal:AbortSignal.timeout(15_000)
+    });
+    if (!response.ok) throw new Error(`OpenEPCIS returned ${response.status}: ${(await response.text()).slice(0, 500)}`);
+    await db.query("UPDATE event_outbox SET processed_at=now(),locked_at=NULL,last_error=NULL WHERE id=$1", [row.id]);
+  } catch (error) {
+    await db.query(
+      `UPDATE event_outbox SET attempts=attempts+1,locked_at=NULL,last_error=$2,
+       available_at=now()+(LEAST(3600,power(2,LEAST(attempts+1,11)))::text||' seconds')::interval WHERE id=$1`,
+      [row.id,String(error.message).slice(0,1000)]
+    );
+  }
+}
+
+async function loop() {
+  while (!stopping) {
+    const row = await claim();
+    if (row) await processOne(row);
+    else await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+}
+process.on("SIGTERM", () => { stopping=true; });
+process.on("SIGINT", () => { stopping=true; });
+try { await loop(); } finally { await db.close(); }

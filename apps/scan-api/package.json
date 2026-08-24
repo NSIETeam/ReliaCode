@@ -1,0 +1,25 @@
+{
+  "name": "@reliacode/scan-api",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "dev": "node --watch src/server.mjs",
+    "start": "node src/server.mjs",
+    "worker": "node src/outbox-worker.mjs",
+    "migrate": "node src/migrate.mjs",
+    "test": "node --test tests/*.test.mjs"
+  },
+  "dependencies": {
+    "@fastify/cors": "^11.1.0",
+    "@fastify/helmet": "^13.0.2",
+    "@fastify/rate-limit": "^10.3.0",
+    "fastify": "^5.6.2",
+    "jose": "^6.1.0",
+    "pg": "^8.16.3",
+    "zod": "^4.1.12"
+  }
+}
