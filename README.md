@@ -8,6 +8,8 @@ It records the lifecycle from individual bag to carton, distributor, and retail 
 - Assign a unique identity to each finished bag.
 - Bind bags to a uniquely identified carton at packing time.
 - Record shipping, receiving, unpacking, repacking, returns, and recall events.
+- Let brands configure auditable incentives for verified distributor and store
+  activities.
 - Publish GS1 EPCIS 2.0 events to an OpenEPCIS repository.
 
 ReliaCode is the business and scan-workflow layer. OpenEPCIS is the standards-based
@@ -23,6 +25,8 @@ Scan stations / mobile app -> ReliaCode API -> OpenEPCIS -> trace and recall vie
 
 See [the architecture note](docs/architecture.md) and
 [ADR-0001](docs/adr/0001-openepcis-as-traceability-core.md).
+The initial incentive design is documented in
+[scan-incentive.md](docs/domain/scan-incentive.md).
 
 ## First acceptance scenario
 

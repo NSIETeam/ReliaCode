@@ -7,6 +7,10 @@ scan validation, carton contents, business-document references, and exception
 handling. OpenEPCIS owns standards-compliant persistence and querying of EPCIS
 events.
 
+The incentive service consumes verified ReliaCode workflow events. It never
+changes a traceability event or treats an unverified QR scan as a rewardable
+activity. See [the incentive domain design](domain/scan-incentive.md).
+
 ## Object identities
 
 | Object | Identity | Purpose |
@@ -32,3 +36,10 @@ business location, acting organization, and an idempotency key.
 A bag can belong to at most one active carton. Shipping a sealed carton moves
 its known contents logically; receiving normally scans the carton once and
 performs bag-level verification only when an exception or inspection requires it.
+
+## Incentive rule
+
+An activity can earn a reward only after server-side verification of the actor,
+organization, expected shipment, object state, active carton membership, and
+campaign rule. A reward entry is append-only and can only be cancelled using a
+separate reversing entry.
