@@ -24,7 +24,7 @@ export async function buildApp({ config, db }) {
   await app.register(cors, {
     origin(origin, callback) {
       if (!origin || config.corsOrigins.includes(origin)) return callback(null, true);
-      return callback(new Error("Origin is not allowed"), false);
+      return callback(null, false);
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
