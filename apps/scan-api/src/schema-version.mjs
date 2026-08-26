@@ -1,1 +1,1 @@
-export const REQUIRED_SCHEMA_VERSION = "003_public_verification.sql";
+export const REQUIRED_SCHEMA_VERSION = "006_organization_memberships.sql";

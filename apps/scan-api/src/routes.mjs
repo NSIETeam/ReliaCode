@@ -1,6 +1,6 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { z } from "zod";
-import { requireCapability } from "./auth.mjs";
+import { hashPassword, hashToken, newSessionToken, readCookie, verifyPassword, requireCapability, requireAnyCapability, ROLE_CAPABILITIES, ROLES } from "./auth.mjs";
 import { eventCapability, nextObjectStatus, verificationForEvent } from "./domain.mjs";
 import { getIdempotentResponse, lockIdempotencyKey, requestHash, saveIdempotentResponse } from "./idempotency.mjs";
 import { codeBatchSchema, parseIdempotencyKey, riskDecisionSchema, traceEventSchema } from "./schemas.mjs";
@@ -24,6 +24,112 @@ function campaignScopeMatches(scope, object, principal) {
   const organizationIds = Array.isArray(scope?.organizationIds) ? scope.organizationIds : [];
   return (!skuIds.length || skuIds.includes(object.product_id)) &&
     (!organizationIds.length || organizationIds.includes(principal.organizationId));
+}
+
+const workspaceStateSchema = z.object({
+  schemaVersion:z.literal(1),
+  initialized:z.boolean(),
+  workspace:z.object({ id:z.string().uuid(), brandName:z.string().min(1).max(160), createdAt:z.string().max(80) }).passthrough(),
+  accounts:z.array(z.record(z.string(), z.unknown())).max(100),
+  currentAccountId:z.string().uuid().nullable(),
+  products:z.array(z.record(z.string(), z.unknown())).max(10000),
+  codeBatches:z.array(z.record(z.string(), z.unknown())).max(10000),
+  objects:z.record(z.string(), z.object({
+    code:z.string().min(1).max(200),
+    publicId:z.string().uuid(),
+    level:z.enum(['ITEM','CASE','PALLET']),
+    lot:z.string().max(200).nullable().optional(),
+    status:z.string().min(1).max(40),
+    productId:z.string().uuid(),
+    createdAt:z.string().max(80)
+  }).passthrough()).superRefine((value, ctx) => {
+    if (Object.keys(value).length > 10000) ctx.addIssue({ code:'custom', message:'objects limit exceeded' });
+  }),
+  events:z.array(z.record(z.string(), z.unknown())).max(50000),
+  campaigns:z.array(z.record(z.string(), z.unknown())).max(10000),
+  ledger:z.array(z.record(z.string(), z.unknown())).max(50000),
+  risks:z.array(z.record(z.string(), z.unknown())).max(50000),
+  agentRuns:z.array(z.record(z.string(), z.unknown())).max(50000)
+}).strict();
+
+export function parseWorkspace(value) {
+  let serialized;
+  try { serialized = JSON.stringify(value); } catch { const error = new Error('Workspace payload must be valid JSON'); error.statusCode=400; error.code='WORKSPACE_INVALID'; throw error; }
+  if (serialized === undefined || serialized === 'null') { const error = new Error('Workspace payload must be a JSON object'); error.statusCode=400; error.code='WORKSPACE_INVALID'; throw error; }
+  if (serialized.length > 4 * 1024 * 1024) {
+    const error = new Error('Workspace exceeds 4 MiB limit'); error.statusCode=413; error.code='WORKSPACE_TOO_LARGE'; throw error;
+  }
+  try {
+    return workspaceStateSchema.parse(value);
+  } catch (error) {
+    if (error?.name === 'ZodError') { error.statusCode=400; error.code='VALIDATION_ERROR'; }
+    throw error;
+  }
+}
+
+function emptyWorkspaceState() {
+  const bytes = randomBytes(16);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const id = bytes.toString('hex').replace(/^(.{8})(.{4})(.{4})(.{4})(.{12})$/, '$1-$2-$3-$4-$5');
+  return {
+    schemaVersion:1,
+    initialized:false,
+    workspace:{ id, brandName:'ReliaCode', createdAt:new Date().toISOString() },
+    accounts:[], currentAccountId:null, products:[], codeBatches:[], objects:{},
+    events:[], campaigns:[], ledger:[], risks:[], agentRuns:[]
+  };
+}
+
+async function syncPublicProjection(client, state, ownerUserId=null) {
+  if (ownerUserId) await client.query(`DELETE FROM admin_public_objects WHERE owner_user_id=$1 OR owner_user_id IN (
+    SELECT m.user_id FROM local_memberships m WHERE m.organization_id=(SELECT organization_id FROM local_memberships WHERE user_id=$1 AND status='ACTIVE' LIMIT 1)
+  )`, [ownerUserId]);
+  else await client.query('DELETE FROM admin_public_objects WHERE owner_user_id IS NULL');
+  const products = new Map(state.products.map((item) => [String(item.id), item]));
+  const eventsByCode = new Map();
+  for (const event of state.events) {
+    if (!event.code || !event.time) continue;
+    const list = eventsByCode.get(String(event.code).toUpperCase()) || [];
+    if (list.length < 20) list.push({ type:String(event.action || 'VERIFY'), time:String(event.time) });
+    eventsByCode.set(String(event.code).toUpperCase(), list);
+  }
+  for (const object of Object.values(state.objects)) {
+    const product = products.get(String(object.productId));
+    if (!product) continue;
+    await client.query(
+      'INSERT INTO admin_public_objects(public_id,code,level,lot,status,commissioned_at,product_name,gtin,events,owner_user_id) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9::jsonb,$10)',
+      [object.publicId, object.code, object.level, object.lot || null, object.status, object.createdAt, String(product.name || 'Product'), product.gtin || null, JSON.stringify(eventsByCode.get(String(object.code).toUpperCase()) || []), ownerUserId]
+    );
+  }
+}
+
+function normalized(value) { return String(value).trim().toLocaleLowerCase('en-US'); }
+const roleSchema = z.enum(ROLES);
+const emailSchema = z.string().trim().email().max(254).transform(normalized);
+async function inTransaction(db, work) { return typeof db.transaction === 'function' ? db.transaction(work) : work(db); }
+function sessionUser(principal) {
+  return {
+    id:principal.id, name:principal.name, email:principal.email || null, role:principal.role,
+    capabilities:[...principal.capabilities], tenantId:principal.tenantId,
+    organizationId:principal.organizationId, organizationName:principal.organizationName || null
+  };
+}
+function sessionCookies(config, token, csrf) {
+  const secure = config.SESSION_COOKIE_SECURE ? '; Secure' : '';
+  const age = config.SESSION_TTL_HOURS * 3600;
+  return [config.SESSION_COOKIE_NAME + '=' + token + '; Path=/; HttpOnly; SameSite=Strict; Max-Age=' + age + secure, config.CSRF_COOKIE_NAME + '=' + csrf + '; Path=/; SameSite=Strict; Max-Age=' + age + secure];
+}
+
+async function createSession(db, config, userId=null) {
+  const token = newSessionToken();
+  const csrf = newSessionToken();
+  await db.query('DELETE FROM admin_sessions WHERE expires_at <= now()');
+  await db.query(
+    'INSERT INTO admin_sessions(token_hash,csrf_token_hash,user_id,expires_at) VALUES($1,$2,$3,now()+($4::text || \' hours\')::interval)',
+    [hashToken(token), hashToken(csrf), userId, String(config.SESSION_TTL_HOURS)]
+  );
+  return { token, csrf };
 }
 
 async function createRewardForEvent(client, { request, event, object, idempotencyKey }) {
@@ -73,9 +179,275 @@ async function createRewardForEvent(client, { request, event, object, idempotenc
   return { claim:claimResult.rows[0], ledgerEntry:ledgerResult.rows[0], reason:"REWARD_HELD", campaign:{ id:campaign.campaign_id, code:campaign.code, version:campaign.version } };
 }
 
-export function registerRoutes(app, { db }) {
+export function registerRoutes(app, { db, config, loginAttempts }) {
+  app.post('/api/v1/organization/invitations', async (request, reply) => {
+    if (config.AUTH_MODE !== 'local') return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
+    requireCapability(request.principal, 'members:invite');
+    if (request.principal.id === 'local-admin') return reply.code(403).send({ code:'MEMBERSHIP_REQUIRED', message:'A local user membership is required to invite members' });
+    const body=z.object({
+      email:z.string().trim().email().max(254).optional(),
+      role:roleSchema,
+      expiresInHours:z.coerce.number().int().min(1).max(720).default(168)
+    }).strict().parse(request.body || {});
+    const token=newSessionToken(), invitationId=randomUUID(), expiresAt=new Date(Date.now()+body.expiresInHours*3_600_000);
+    const email=body.email ? normalized(body.email) : null;
+    const organization=await db.query('SELECT id,name,status FROM local_organizations WHERE id=$1 AND status=\'ACTIVE\'', [request.principal.organizationId]);
+    if (!organization.rowCount) return reply.code(404).send({ code:'ORGANIZATION_NOT_FOUND', message:'Organization is not available' });
+    await db.query(
+      `INSERT INTO local_invitations(id,organization_id,invited_by_user_id,email,role,token_hash,expires_at)
+       VALUES($1,$2,$3,$4,$5,$6,$7)`,
+      [invitationId,request.principal.organizationId,request.principal.id,email,body.role,hashToken(token),expiresAt.toISOString()]
+    );
+    // The raw token is returned exactly once. Its hash is never included in a
+    // response or log and is only useful for the one-time accept operation.
+    return reply.code(201).send({ invitation:{ id:invitationId,email,role:body.role,expiresAt:expiresAt.toISOString(),organization:{ id:organization.rows[0].id,name:organization.rows[0].name } }, token });
+  });
+
+  app.get('/api/v1/organization/invitations', async (request, reply) => {
+    if (config.AUTH_MODE !== 'local') return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
+    requireAnyCapability(request.principal, ['members:read','members:invite']);
+    const result=await db.query(
+      `SELECT id,email,role,expires_at,accepted_at,revoked_at,created_at
+       FROM local_invitations WHERE organization_id=$1 ORDER BY created_at DESC LIMIT 200`,
+      [request.principal.organizationId]
+    );
+    return { invitations:result.rows.map((row)=>({ id:row.id,email:row.email,role:row.role,expiresAt:row.expires_at,acceptedAt:row.accepted_at,revokedAt:row.revoked_at,createdAt:row.created_at })) };
+  });
+
+  app.delete('/api/v1/organization/invitations/:id', async (request, reply) => {
+    if (config.AUTH_MODE !== 'local') return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
+    requireCapability(request.principal, 'members:invite');
+    const id=z.string().uuid().parse(request.params.id);
+    const result=await db.query(
+      `UPDATE local_invitations SET revoked_at=now()
+       WHERE id=$1 AND organization_id=$2 AND accepted_at IS NULL AND revoked_at IS NULL
+       RETURNING id,revoked_at`,
+      [id,request.principal.organizationId]
+    );
+    if (!result.rowCount) return reply.code(404).send({ code:'INVITATION_NOT_FOUND', message:'Invitation is missing or no longer active' });
+    return { revoked:true, invitation:{ id:result.rows[0].id,revokedAt:result.rows[0].revoked_at } };
+  });
+
+  app.get('/api/v1/organization/members', async (request, reply) => {
+    if (config.AUTH_MODE !== 'local') return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
+    requireAnyCapability(request.principal, ['members:read','members:invite']);
+    const result=await db.query(
+      `SELECT u.id,u.username,u.email,m.role,m.status,m.created_at,o.name organization_name
+       FROM local_memberships m JOIN local_users u ON u.id=m.user_id
+       JOIN local_organizations o ON o.id=m.organization_id
+       WHERE m.organization_id=$1 ORDER BY m.created_at ASC`,
+      [request.principal.organizationId]
+    );
+    return { members:result.rows.map((row)=>({ id:row.id,name:row.username,email:row.email,role:row.role,status:row.status,createdAt:row.created_at,organizationName:row.organization_name })) };
+  });
+
+  app.patch('/api/v1/organization/members/:userId', async (request, reply) => {
+    if (config.AUTH_MODE !== 'local') return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
+    requireCapability(request.principal, 'members:manage');
+    const userId=z.string().uuid().parse(request.params.userId);
+    const body=z.object({ role:roleSchema }).strict().parse(request.body);
+    if (userId===request.principal.id && body.role!=='BRAND_ADMIN') return reply.code(409).send({ code:'OWNER_ROLE_REQUIRED', message:'The organization owner must remain a brand admin' });
+    const current=await db.query(
+      `SELECT m.user_id,m.role,m.status,o.owner_user_id FROM local_memberships m JOIN local_organizations o ON o.id=m.organization_id
+       WHERE m.organization_id=$1 AND m.user_id=$2`,
+      [request.principal.organizationId,userId]
+    );
+    if (!current.rowCount || current.rows[0].status!=='ACTIVE') return reply.code(404).send({ code:'MEMBER_NOT_FOUND', message:'Member is not active' });
+    if (current.rows[0].owner_user_id===userId && body.role!=='BRAND_ADMIN') return reply.code(409).send({ code:'OWNER_ROLE_REQUIRED', message:'The organization owner must remain a brand admin' });
+    if (current.rows[0].role==='BRAND_ADMIN' && body.role!=='BRAND_ADMIN') {
+      const admins=await db.query(`SELECT count(*)::int count FROM local_memberships WHERE organization_id=$1 AND status='ACTIVE' AND role='BRAND_ADMIN'`,[request.principal.organizationId]);
+      if (Number(admins.rows[0]?.count||0)<=1) return reply.code(409).send({ code:'LAST_ADMIN', message:'The organization must retain a brand admin' });
+    }
+    const updated=await inTransaction(db, async (client)=>{
+      const membership=await client.query(`UPDATE local_memberships SET role=$1,updated_at=now() WHERE organization_id=$2 AND user_id=$3 RETURNING user_id,role,status`,[body.role,request.principal.organizationId,userId]);
+      await client.query(`UPDATE local_users SET role=$1,updated_at=now() WHERE id=$2 AND organization_id=$3`,[body.role,userId,request.principal.organizationId]);
+      return membership.rows[0];
+    });
+    return { member:{ id:updated.user_id,role:updated.role,status:updated.status } };
+  });
+
+  app.post('/api/auth/invitations/accept', async (request, reply) => {
+    if (config.AUTH_MODE !== 'local') return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
+    const body=z.object({
+      token:z.string().trim().min(20).max(200),
+      username:z.string().trim().min(3).max(32).regex(/^[\p{L}\p{N}_-]+$/u).optional(),
+      email:z.string().trim().email().max(254).optional(),
+      password:z.string().min(10).max(200).refine((value)=>/\p{L}/u.test(value)&&/\p{N}/u.test(value),'Password must contain at least one letter and one number').optional()
+    }).strict().parse(request.body);
+    const authenticated=Boolean(request.principal);
+    if (!authenticated && (!body.username || !body.email || !body.password)) return reply.code(400).send({ code:'INVITATION_ACCOUNT_REQUIRED', message:'Username, email and password are required for a new invited account' });
+    if (authenticated && (body.username || body.email || body.password)) return reply.code(400).send({ code:'INVITATION_ACCOUNT_CONFLICT', message:'An authenticated member must not submit new account credentials' });
+    const result=await inTransaction(db, async (client)=>{
+      const invite=await client.query(
+        `SELECT i.id,i.organization_id,i.invited_by_user_id,i.email,i.role,i.expires_at,o.tenant_id,o.name organization_name
+         FROM local_invitations i JOIN local_organizations o ON o.id=i.organization_id
+         WHERE i.token_hash=$1 AND i.accepted_at IS NULL AND i.revoked_at IS NULL AND i.expires_at>now() AND o.status='ACTIVE' FOR UPDATE`,
+        [hashToken(body.token)]
+      );
+      if (!invite.rowCount) return { error:{ status:404,code:'INVITATION_INVALID',message:'Invitation is invalid, expired or revoked' } };
+      const invitation=invite.rows[0];
+      if (invitation.email && normalized(body.email || request.principal?.email || '')!==invitation.email) return { error:{ status:403,code:'INVITATION_EMAIL_MISMATCH',message:'Invitation email does not match the account' } };
+      let userId=request.principal?.id, username=request.principal?.name, email=request.principal?.email || invitation.email;
+      if (userId) {
+        const existing=await client.query(`SELECT organization_id FROM local_memberships WHERE user_id=$1 AND status='ACTIVE'`,[userId]);
+        if (existing.rowCount) return { error:{ status:409,code:'ALREADY_MEMBER',message:'This account already belongs to an organization' } };
+      } else {
+        userId=randomUUID(); username=body.username.trim(); email=normalized(body.email);
+        const inserted=await client.query(
+          `INSERT INTO local_users(id,username,normalized_username,email,normalized_email,password_hash,tenant_id,organization_id,role)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) ON CONFLICT DO NOTHING RETURNING id,username,email,role`,
+          [userId,username,normalized(username),email,email,hashPassword(body.password),invitation.tenant_id,invitation.organization_id,invitation.role]
+        );
+        if (!inserted.rowCount) return { error:{ status:409,code:'ACCOUNT_EXISTS',message:'Username or email is already registered' } };
+      }
+      await client.query('INSERT INTO local_memberships(id,user_id,organization_id,role) VALUES($1,$2,$3,$4)',[randomUUID(),userId,invitation.organization_id,invitation.role]);
+      await client.query('UPDATE local_invitations SET accepted_at=now() WHERE id=$1',[invitation.id]);
+      return { user:{ id:userId,name:username,email,role:invitation.role,capabilities:ROLE_CAPABILITIES[invitation.role],tenantId:invitation.tenant_id,organizationId:invitation.organization_id,organizationName:invitation.organization_name } };
+    });
+    if (result.error) return reply.code(result.error.status).send({ code:result.error.code,message:result.error.message });
+    const session=await createSession(db,config,result.user.id);
+    reply.header('set-cookie',sessionCookies(config,session.token,session.csrf));
+    return { authenticated:true,csrfToken:session.csrf,user:result.user,invitationAccepted:true };
+  });
+
+  app.post('/api/auth/register', async (request, reply) => {
+    if (config.AUTH_MODE !== 'local') return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
+    const now=Date.now(), key='register:'+request.ip;
+    const attempt=loginAttempts.get(key) || { count:0, resetAt:now+300000 };
+    if (attempt.resetAt<=now) { attempt.count=0; attempt.resetAt=now+300000; }
+    if (attempt.count>=5) return reply.code(429).send({ code:'REGISTER_RATE_LIMITED', message:'Too many registration attempts' });
+    const body=z.object({
+      username:z.string().trim().min(3).max(32).regex(/^[\p{L}\p{N}_-]+$/u, 'Username may only contain letters, numbers, underscores and hyphens'),
+      email:z.string().trim().email().max(254),
+      password:z.string().min(10).max(200).refine((value)=>/\p{L}/u.test(value)&&/\p{N}/u.test(value), 'Password must contain at least one letter and one number'),
+      organizationName:z.string().trim().min(1).max(160).optional()
+    }).strict().parse(request.body);
+    attempt.count+=1; loginAttempts.set(key,attempt);
+    const user={ id:randomUUID(), tenantId:randomUUID(), organizationId:randomUUID(), username:body.username.trim(), email:body.email.trim() };
+    const created=await inTransaction(db, async (client) => {
+      const inserted=await client.query(
+        `INSERT INTO local_users(id,username,normalized_username,email,normalized_email,password_hash,tenant_id,organization_id,role)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,'BRAND_ADMIN') ON CONFLICT DO NOTHING RETURNING id,username,email,role`,
+        [user.id,user.username,normalized(user.username),user.email,normalized(user.email),hashPassword(body.password),user.tenantId,user.organizationId]
+      );
+      if (!inserted.rowCount) return { duplicate:true };
+      const organizationName=body.organizationName || `${user.username} Organization`;
+      await client.query('INSERT INTO local_organizations(id,tenant_id,name,owner_user_id) VALUES($1,$2,$3,$4)',[user.organizationId,user.tenantId,organizationName,user.id]);
+      await client.query('INSERT INTO local_memberships(id,user_id,organization_id,role) VALUES($1,$2,$3,$4)',[randomUUID(),user.id,user.organizationId,'BRAND_ADMIN']);
+      return { duplicate:false, organizationName };
+    });
+    if (created.duplicate) return reply.code(409).send({ code:'ACCOUNT_EXISTS', message:'Username or email is already registered' });
+    loginAttempts.delete(key);
+    const session=await createSession(db,config,user.id);
+    reply.header('set-cookie',sessionCookies(config,session.token,session.csrf));
+    return reply.code(201).send({ authenticated:true,csrfToken:session.csrf,user:{ id:user.id,name:user.username,email:user.email,role:'BRAND_ADMIN',capabilities:ROLE_CAPABILITIES.BRAND_ADMIN,tenantId:user.tenantId,organizationId:user.organizationId,organizationName:created.organizationName } });
+  });
+
+  app.post('/api/auth/login', async (request, reply) => {
+    if (config.AUTH_MODE !== 'local') return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
+    const now = Date.now();
+    const key = request.ip;
+    if (loginAttempts.size > 10000) for (const [ip, value] of loginAttempts) if (value.resetAt <= now) loginAttempts.delete(ip);
+    const attempt = loginAttempts.get(key) || { count:0, resetAt:now + 300000 };
+    if (attempt.resetAt <= now) { attempt.count = 0; attempt.resetAt = now + 300000; }
+    if (attempt.count >= 5) return reply.code(429).send({ code:'LOGIN_RATE_LIMITED', message:'Too many login attempts' });
+    const body = z.object({ username:z.string().min(1).max(80), password:z.string().min(1).max(200) }).parse(request.body);
+    const found=await db.query('SELECT id,username,email,password_hash,tenant_id,organization_id,role FROM local_users WHERE (normalized_username=$1 OR normalized_email=$1) AND status=\'ACTIVE\'', [normalized(body.username)]);
+    const user=found.rows[0] || null;
+    const isLegacyAdmin=body.username===config.ADMIN_USERNAME && verifyPassword(body.password,config.ADMIN_PASSWORD_HASH);
+    const passwordValid=user ? verifyPassword(body.password,user.password_hash) : isLegacyAdmin;
+    if (!passwordValid) {
+      attempt.count += 1; loginAttempts.set(key, attempt);
+      return reply.code(401).send({ code:'INVALID_CREDENTIALS', message:'Invalid username or password' });
+    }
+    loginAttempts.delete(key);
+    const session=await createSession(db,config,user?.id || null);
+    reply.header('set-cookie',sessionCookies(config,session.token,session.csrf));
+    const role=String(user?.role || 'BRAND_ADMIN').toUpperCase();
+    return { authenticated:true, csrfToken:session.csrf, user:{ id:user?.id || 'local-admin', name:user?.username || config.ADMIN_USERNAME, email:user?.email || null, role, capabilities:ROLE_CAPABILITIES[role] || ROLE_CAPABILITIES.BRAND_ADMIN, tenantId:user?.tenant_id || config.ADMIN_TENANT_ID, organizationId:user?.organization_id || config.ADMIN_ORGANIZATION_ID } };
+  });
+
+  app.get('/api/auth/session', async (request, reply) => {
+    if (config.AUTH_MODE !== 'local' || !request.principal) return reply.code(401).send({ authenticated:false });
+    let csrfToken=readCookie(request.headers.cookie, config.CSRF_COOKIE_NAME);
+    if (!csrfToken || hashToken(csrfToken) !== request.authSession.csrf_token_hash) {
+      csrfToken=newSessionToken();
+      await db.query('UPDATE admin_sessions SET csrf_token_hash=$1,last_seen_at=now() WHERE token_hash=$2', [hashToken(csrfToken), request.authSession.token_hash]);
+      request.authSession.csrf_token_hash = hashToken(csrfToken);
+      const secure = config.SESSION_COOKIE_SECURE ? '; Secure' : '';
+      reply.header('set-cookie', config.CSRF_COOKIE_NAME + '=' + csrfToken + '; Path=/; SameSite=Strict; Max-Age=' + (config.SESSION_TTL_HOURS * 3600) + secure);
+    }
+    return { authenticated:true, csrfToken, user:sessionUser(request.principal) };
+  });
+
+  app.post('/api/auth/logout', async (request, reply) => {
+    if (request.authSession?.token_hash) await db.query('DELETE FROM admin_sessions WHERE token_hash=$1', [request.authSession.token_hash]);
+    const secure = config.SESSION_COOKIE_SECURE ? '; Secure' : '';
+    reply.header('set-cookie', [config.SESSION_COOKIE_NAME + '=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0' + secure, config.CSRF_COOKIE_NAME + '=; Path=/; SameSite=Strict; Max-Age=0' + secure]);
+    return { authenticated:false };
+  });
+
+  app.get('/api/v1/workspace', async (request, reply) => {
+    const result = request.principal.id==='local-admin'
+      ? await db.query('SELECT workspace,version,updated_at FROM admin_workspaces WHERE id=1')
+      : await db.query('SELECT workspace,version,updated_at FROM local_organization_workspaces WHERE organization_id=$1',[request.principal.organizationId]);
+    if (!result.rowCount) return reply.code(404).send({ code:'WORKSPACE_NOT_FOUND', message:'Workspace has not been initialized' });
+    return { workspace:result.rows[0].workspace, version:Number(result.rows[0].version), updatedAt:result.rows[0].updated_at };
+  });
+
+  app.put('/api/v1/workspace', async (request, reply) => {
+    requireAnyCapability(request.principal, ['codes:write','events:write:packing','events:write:distributor_receiving','events:write:store_receiving']);
+    const body = z.object({ version:z.coerce.number().int().min(0), workspace:z.unknown() }).parse(request.body);
+    const state = parseWorkspace(body.workspace);
+    const result = await db.transaction(async (client) => {
+      const legacy=request.principal.id==='local-admin';
+      const saved = legacy
+        ? await client.query('INSERT INTO admin_workspaces(id,workspace,version) VALUES(1,$1,0) ON CONFLICT(id) DO UPDATE SET workspace=EXCLUDED.workspace,version=admin_workspaces.version+1,updated_at=now() WHERE admin_workspaces.version=$2 RETURNING workspace,version,updated_at',[state,body.version])
+        : await client.query('INSERT INTO local_organization_workspaces(organization_id,workspace,version) VALUES($1,$2,0) ON CONFLICT(organization_id) DO UPDATE SET workspace=EXCLUDED.workspace,version=local_organization_workspaces.version+1,updated_at=now() WHERE local_organization_workspaces.version=$3 RETURNING workspace,version,updated_at',[request.principal.organizationId,state,body.version]);
+      if (!saved.rowCount) return { conflict:true, current:legacy ? await client.query('SELECT workspace,version,updated_at FROM admin_workspaces WHERE id=1') : await client.query('SELECT workspace,version,updated_at FROM local_organization_workspaces WHERE organization_id=$1',[request.principal.organizationId]) };
+      if (config.AUTH_MODE === 'local') await syncPublicProjection(client, state, legacy ? null : request.principal.id);
+      if (!legacy && request.principal.role === 'BRAND_ADMIN') await client.query('UPDATE local_organizations SET name=$1,updated_at=now() WHERE id=$2 AND status=\'ACTIVE\'', [state.workspace.brandName,request.principal.organizationId]);
+      return { saved:saved.rows[0] };
+    });
+    if (result.conflict) {
+      const current=result.current.rows[0];
+      return reply.code(409).send({ code:'WORKSPACE_VERSION_CONFLICT', message:'Workspace was changed by another session', current:current ? { workspace:current.workspace, version:Number(current.version), updatedAt:current.updated_at } : null });
+    }
+    return { workspace:result.saved.workspace, version:Number(result.saved.version), updatedAt:result.saved.updated_at };
+  });
+
+  app.post('/api/v1/workspace/reset', async (request, reply) => {
+    requireCapability(request.principal, 'codes:write');
+    const body = z.object({ version:z.coerce.number().int().min(0).optional() }).strict().default({}).parse(request.body);
+    const result = await db.transaction(async (client) => {
+      const legacy=request.principal.id==='local-admin';
+      const current = legacy ? await client.query('SELECT workspace,version,updated_at FROM admin_workspaces WHERE id=1 FOR UPDATE') : await client.query('SELECT workspace,version,updated_at FROM local_organization_workspaces WHERE organization_id=$1 FOR UPDATE',[request.principal.organizationId]);
+      const currentRow = current.rows[0] || null;
+      const currentVersion = currentRow ? Number(currentRow.version) : 0;
+      if (body.version !== undefined && body.version !== currentVersion) {
+        return { conflict:true, current:currentRow ? { workspace:currentRow.workspace, version:currentVersion, updatedAt:currentRow.updated_at } : null };
+      }
+      const state = emptyWorkspaceState();
+      const saved = legacy
+        ? (currentRow ? await client.query('UPDATE admin_workspaces SET workspace=$1,version=version+1,updated_at=now() WHERE id=1 RETURNING workspace,version,updated_at',[state]) : await client.query('INSERT INTO admin_workspaces(id,workspace,version) VALUES(1,$1,0) RETURNING workspace,version,updated_at',[state]))
+        : (currentRow ? await client.query('UPDATE local_organization_workspaces SET workspace=$1,version=version+1,updated_at=now() WHERE organization_id=$2 RETURNING workspace,version,updated_at',[state,request.principal.organizationId]) : await client.query('INSERT INTO local_organization_workspaces(organization_id,workspace,version) VALUES($1,$2,0) RETURNING workspace,version,updated_at',[request.principal.organizationId,state]));
+      if (legacy) await client.query('DELETE FROM admin_public_objects WHERE owner_user_id IS NULL');
+      else await client.query(`DELETE FROM admin_public_objects WHERE owner_user_id=$1 OR owner_user_id IN (
+        SELECT m.user_id FROM local_memberships m WHERE m.organization_id=(SELECT organization_id FROM local_memberships WHERE user_id=$1 AND status='ACTIVE' LIMIT 1)
+      )`,[request.principal.id]);
+      return { saved:saved.rows[0] };
+    });
+    if (result.conflict) return reply.code(409).send({ code:'WORKSPACE_VERSION_CONFLICT', message:'Workspace was changed by another session', current:result.current });
+    return { workspace:result.saved.workspace, version:Number(result.saved.version), updatedAt:result.saved.updated_at };
+  });
   app.get("/api/public/v1/objects/:publicId", async (request, reply) => {
     const publicId = z.string().uuid().parse(request.params.publicId);
+    if (config.AUTH_MODE === 'local') {
+      const projected = await db.query('SELECT public_id,level,lot,status,commissioned_at,gtin,product_name,events FROM admin_public_objects WHERE public_id=$1', [publicId]);
+      if (!projected.rowCount) return reply.code(404).send({ code:"PUBLIC_OBJECT_NOT_FOUND", message:"Reliable code not found" });
+      const item=projected.rows[0];
+      return { verified:true, product:{ name:item.product_name, gtin:item.gtin }, object:{ publicId:item.public_id, level:item.level, lot:item.lot, status:item.status, commissionedAt:item.commissioned_at }, events:Array.isArray(item.events) ? item.events.slice(0,20) : [] };
+    }
     const result = await db.query(
       `SELECT so.id,so.public_id,so.level,so.lot,so.status,so.created_at,p.gtin,p.name product_name
        FROM serialized_objects so JOIN products p ON p.id=so.product_id
@@ -103,6 +475,7 @@ export function registerRoutes(app, { db }) {
     name: request.principal.name,
     tenantId: request.principal.tenantId,
     organizationId: request.principal.organizationId,
+    organizationName: request.principal.organizationName || null,
     role: request.principal.role,
     capabilities: [...request.principal.capabilities]
   }));

@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { buildApp } from "../src/app.mjs";
 import { loadConfig } from "../src/config.mjs";
+import { parseWorkspace } from "../src/routes.mjs";
 
 const config = loadConfig({
   NODE_ENV:"test",
@@ -22,7 +23,7 @@ test("health endpoints do not require authentication", async (t) => {
   const ready = await app.inject({ method:"GET", url:"/health/ready" });
   assert.equal(live.statusCode, 200);
   assert.equal(ready.statusCode, 200);
-  assert.equal(ready.json().schemaVersion, "003_public_verification.sql");
+  assert.equal(ready.json().schemaVersion, "006_organization_memberships.sql");
 });
 
 test("readiness fails when the database schema is outdated", async (t) => {
@@ -82,4 +83,12 @@ test("token claims cannot escape the active database scope", async (t) => {
   const response = await app.inject({ method:"GET",url:"/api/v1/me",headers:{ "x-reliacode-principal":principal } });
   assert.equal(response.statusCode, 403);
   assert.equal(response.json().code, "PRINCIPAL_SCOPE_INACTIVE");
+});
+
+test("workspace schema enforces strict shape and serialized size", () => {
+  const ids={workspaceId:"11111111-1111-4111-8111-111111111111",accountId:"22222222-2222-4222-8222-222222222222"};
+  const state={schemaVersion:1,initialized:true,workspace:{id:ids.workspaceId,brandName:"Demo",createdAt:"2026-08-25"},accounts:[{id:ids.accountId}],currentAccountId:ids.accountId,products:[],codeBatches:[],objects:{},events:[],campaigns:[],ledger:[],risks:[],agentRuns:[]};
+  assert.equal(parseWorkspace(state).schemaVersion,1);
+  assert.throws(() => parseWorkspace({...state,unexpected:true}), /Unrecognized key/);
+  assert.throws(() => parseWorkspace({...state,accounts:[{id:ids.accountId,name:"x".repeat(4*1024*1024)}]}), (error) => error.code === "WORKSPACE_TOO_LARGE" && error.statusCode === 413);
 });

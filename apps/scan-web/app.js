@@ -33,6 +33,27 @@ const localTime = (value=timestamp()) => new Date(value).toLocaleString("zh-CN",
 const cloneEmpty = () => structuredClone(EMPTY_STATE);
 function readState() { try { const value=JSON.parse(localStorage.getItem(STORAGE_KEY));if(value?.schemaVersion!==1)return cloneEmpty();for(const item of Object.values(value.objects||{}))if(!item.publicId)item.publicId=uuid();return value; } catch { return cloneEmpty(); } }
 let state = readState();
+// A workspace account is a projection of the authenticated server session. It is
+// intentionally not a demo-account switcher: production role changes must come
+// from the identity provider/member service.
+const ROLE_CAPABILITIES = Object.freeze({
+  BRAND_ADMIN: ["codes:write", "objects:read", "events:read", "campaigns:write", "risks:review", "ledger:read"],
+  BRAND_AUDITOR: ["objects:read", "events:read", "risks:review", "ledger:read"],
+  FACTORY_OPERATOR: ["objects:read", "events:write:packing"],
+  DISTRIBUTOR_RECEIVER: ["objects:read", "events:write:distributor_receiving"],
+  STORE_RECEIVER: ["objects:read", "events:write:store_receiving", "ledger:read:self"],
+  FINANCE: ["ledger:read", "settlements:write"]
+});
+const ROLE_LABELS = Object.freeze({
+  BRAND_ADMIN: "品牌管理员", BRAND_AUDITOR: "品牌稽核", FACTORY_OPERATOR: "工厂操作员",
+  DISTRIBUTOR_RECEIVER: "经销商收货员", STORE_RECEIVER: "门店收货员", FINANCE: "财务"
+});
+const ROLE_DEFAULT_VIEW = Object.freeze({
+  BRAND_ADMIN: "dashboard", BRAND_AUDITOR: "movement", FACTORY_OPERATOR: "receive",
+  DISTRIBUTOR_RECEIVER: "receive", STORE_RECEIVER: "receive", FINANCE: "ledger"
+});
+let sessionUser = null;
+let lastRenderedRole = null;
 let pendingFieldEvent = null;
 let agentReturnFocus = null;
 let cameraStream = null;
@@ -40,9 +61,92 @@ let cameraFrame = 0;
 let cameraBusy = false;
 let pendingDeepLink = new URL(location.href).searchParams.get("verify");
 let publicLoadStarted = false;
+let publicLoadToken = 0;
 const apiBaseUrl = String(window.RELIACODE_CONFIG?.apiBaseUrl||"").replace(/\/$/,"");
-const save = () => localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+const persistentWorkspace = Boolean(window.RELIACODE_CONFIG?.persistentWorkspace);
+const sameOriginApiAvailable = persistentWorkspace || Boolean(apiBaseUrl);
+let serverVersion = 0;
+let csrfToken = "";
+let serverReady = !persistentWorkspace;
+let saveTimer = null;
+let saveInFlight = false;
+let saveDirty = false;
+let saveConflict = null;
+let saveRevision = 0;
+let saveRetryAttempt = 0;
+let saveOnline = navigator.onLine !== false;
+const apiUrl = (path) => apiBaseUrl + path;
+async function serverRequest(path, options={}) {
+  const response = await fetch(apiUrl(path), { credentials:"include", ...options, headers:{ Accept:"application/json", ...(options.body?{"Content-Type":"application/json"}:{}), ...(options.headers||{}) } });
+  const body = await response.json().catch(()=>({}));
+  if (!response.ok) { const error = new Error(body.message || ("Request failed (" + response.status + ")")); error.status=response.status; error.body=body; throw error; }
+  return body;
+}
+function workspacePayloadValid(value,{allowUninitialized=false}={}){
+  const shape=value&&value.schemaVersion===1&&Array.isArray(value.accounts)&&Array.isArray(value.products)&&Array.isArray(value.codeBatches)&&value.objects&&typeof value.objects==='object'&&!Array.isArray(value.objects)&&Array.isArray(value.events)&&Array.isArray(value.campaigns)&&Array.isArray(value.ledger)&&Array.isArray(value.risks)&&Array.isArray(value.agentRuns);
+  if(!shape)return false;
+  if(value.initialized===true)return Boolean(value.workspace&&typeof value.workspace==='object');
+  return allowUninitialized&&value.initialized===false&&value.workspace&&typeof value.workspace==='object'&&value.accounts.length===0&&value.products.length===0&&value.codeBatches.length===0&&Object.keys(value.objects).length===0&&value.events.length===0&&value.campaigns.length===0&&value.ledger.length===0&&value.risks.length===0&&value.agentRuns.length===0;
+}
+function parseWorkspaceResponse(body,options={}){if(!body||!Number.isInteger(Number(body.version))||!workspacePayloadValid(body.workspace,options)){const error=new Error('服务器返回的工作区数据无效');error.code='INVALID_WORKSPACE_PAYLOAD';throw error;}return {...body,version:Number(body.version)};}
+function exportWorkspaceSnapshot(value=state){downloadFile('reliacode-workspace-local-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(value,null,2),'application/json');}
+function showPersistenceStatus(message,actions=[]){let node=$('#persistence-status');if(!node){node=document.createElement('div');node.id='persistence-status';Object.assign(node.style,{position:'fixed',left:'50%',bottom:'20px',transform:'translateX(-50%)',zIndex:'1000',maxWidth:'min(720px,calc(100vw - 32px))',padding:'14px 16px',borderRadius:'12px',background:'#241b12',color:'#fff',boxShadow:'0 10px 30px #0005',fontSize:'14px'});document.body.append(node);}node.innerHTML='';const text=document.createElement('span');text.textContent=message;node.append(text);for(const action of actions){const button=document.createElement('button');button.type='button';button.textContent=action.label;button.onclick=action.onClick;Object.assign(button.style,{marginLeft:'10px',padding:'6px 10px',borderRadius:'7px',border:'1px solid #ffffff66',background:'#ffffff18',color:'inherit',cursor:'pointer'});node.append(button);}node.hidden=false;}
+function clearPersistenceStatus(){const node=$('#persistence-status');if(node)node.hidden=true;}
+async function persistNow() {
+  if (!persistentWorkspace || !serverReady || saveInFlight || saveConflict || !saveDirty) return false;
+  clearTimeout(saveTimer); saveTimer=null;
+  saveInFlight = true;
+  const revision = saveRevision;
+  try {
+    const result = await serverRequest("/api/v1/workspace", { method:"PUT", headers:{"X-CSRF-Token":csrfToken}, body:JSON.stringify({ version:serverVersion, workspace:state }) });
+    parseWorkspaceResponse(result);
+    serverVersion = Number(result.version);
+    saveRetryAttempt=0;
+    if (saveRevision===revision) saveDirty=false;
+    return true;
+  } catch (error) {
+    saveDirty=true;
+    if (error.status === 409) { saveConflict={status:409}; toast("Workspace changed in another session; reload and retry"); }
+    else { saveRetryAttempt=Math.min(saveRetryAttempt+1,10); toast("Server save failed; check network"); schedulePersistRetry(); }
+    return false;
+  } finally { saveInFlight=false; schedulePersistRetry(); }
+}
+function schedulePersistRetry() {
+  if (!persistentWorkspace || !serverReady || !saveOnline || saveInFlight || saveConflict || !saveDirty) return;
+  clearTimeout(saveTimer);
+  const base=Math.min(30000,500*(2**Math.min(saveRetryAttempt,6)));
+  const jitter=Math.round(base*(Math.random()*0.4-0.2));
+  saveTimer=setTimeout(persistNow,Math.max(250,base+jitter));
+}
+window.addEventListener("offline",()=>{saveOnline=false;clearTimeout(saveTimer);saveTimer=null;});
+window.addEventListener("online",()=>{saveOnline=true;saveRetryAttempt=0;schedulePersistRetry();});
+const save = () => {
+  if (!persistentWorkspace) { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); return; }
+  saveDirty=true; saveRevision+=1; saveRetryAttempt=0;
+  clearTimeout(saveTimer); saveTimer=setTimeout(persistNow, 500);
+};
 const account = () => state.accounts.find((item) => item.id===state.currentAccountId) || state.accounts[0] || null;
+const currentRole = () => String(sessionUser?.role || account()?.roleCode || (account()?.kind === "FIELD" ? "FACTORY_OPERATOR" : "BRAND_ADMIN")).toUpperCase();
+const capabilities = () => new Set(sessionUser?.capabilities || ROLE_CAPABILITIES[currentRole()] || []);
+const can = (capability) => capabilities().has(capability);
+const roleLabel = () => ROLE_LABELS[currentRole()] || account()?.role || currentRole();
+function ensureSessionAccount(user) {
+  if (!user) return;
+  const roleAliases = { "品牌管理员":"BRAND_ADMIN", "品牌稽核":"BRAND_AUDITOR", "工厂操作员":"FACTORY_OPERATOR", "经销商收货员":"DISTRIBUTOR_RECEIVER", "门店收货员":"STORE_RECEIVER", "财务":"FINANCE" };
+  const rawRole = String(user.roleCode || user.role || "BRAND_ADMIN").toUpperCase();
+  const normalizedRole = ROLE_CAPABILITIES[rawRole] ? rawRole : (roleAliases[user.role] || "BRAND_ADMIN");
+  sessionUser = { ...user, role: normalizedRole, capabilities: user.capabilities || ROLE_CAPABILITIES[normalizedRole] || [] };
+  const existing = state.accounts.find((item) => item.id === user.id) || state.accounts[0] || (state.initialized ? { id:user.id, kind:"BRAND", name:user.name, org:state.workspace?.brandName || "", role:"", deviceId:"", location:"" } : null);
+  if (existing && !state.accounts.includes(existing)) state.accounts.push(existing);
+  if (existing) {
+    existing.id = user.id || existing.id;
+    existing.name = user.name || existing.name;
+    existing.roleCode = sessionUser.role;
+    existing.role = ROLE_LABELS[sessionUser.role] || sessionUser.role;
+    existing.kind = sessionUser.role.startsWith("BRAND") || sessionUser.role === "FINANCE" ? "BRAND" : "FIELD";
+    state.currentAccountId = existing.id;
+  }
+}
 const product = (id) => state.products.find((item) => item.id===id);
 function scannedIdentity(value){const text=String(value||"").trim();try{const url=new URL(text);return url.searchParams.get("verify")||url.pathname.match(/\/p\/([0-9a-f-]{36})/i)?.[1]||text;}catch{return text;}}
 const object = (value) => {const identity=scannedIdentity(value),byCode=state.objects[identity.toUpperCase()];return byCode||Object.values(state.objects).find((item)=>item.publicId?.toLowerCase()===identity.toLowerCase())||null;};
@@ -61,26 +165,60 @@ function renderOnboarding() {
   if (!overlay) { overlay=document.createElement("div"); overlay.id="onboarding"; overlay.className="onboarding"; document.body.append(overlay); }
   overlay.hidden=state.initialized;
   if (state.initialized) return;
-  if(pendingDeepLink){overlay.innerHTML=`<section class="onboarding-card public-verification-card"><div class="onboarding-brand">${icon("logo")}<div><b>ReliaCode 可靠码</b><small>公开产品验证</small></div></div><div id="public-verification-result">${emptyState("正在验证产品","正在从品牌验证服务读取公开追溯信息。")}</div><button id="enter-local-workspace" class="secondary" type="button">进入本地运营工作区</button></section>`;$("#enter-local-workspace").onclick=()=>{pendingDeepLink=null;history.replaceState({},"",location.pathname);renderOnboarding();};if(!publicLoadStarted){publicLoadStarted=true;loadPublicVerification(pendingDeepLink);}return;}
-  overlay.innerHTML=`<form id="workspace-form" class="onboarding-card"><div class="onboarding-brand">${icon("logo")}<div><b>ReliaCode 可靠码</b><small>创建空白本地工作区</small></div></div><h1>开始建立产品追溯</h1><p>系统不包含任何示例品牌或业务数据。以下信息由你创建，并仅保存在当前浏览器。</p><label>品牌或企业名称<input name="brandName" required maxlength="80" autocomplete="organization" /></label><label>管理员姓名<input name="adminName" required maxlength="40" autocomplete="name" /></label><label>设备名称<input name="deviceName" required maxlength="80" value="当前浏览器" /></label><label class="consent"><input name="confirm" type="checkbox" required />我已了解 GitHub Pages 版本是单浏览器本地工作区，不等同于多人生产后台。</label><button class="primary" type="submit">创建空白工作区</button></form>`;
-  $("#workspace-form").onsubmit=(event)=>{event.preventDefault();const data=new FormData(event.currentTarget);const brandName=String(data.get("brandName")).trim(),adminName=String(data.get("adminName")).trim(),deviceName=String(data.get("deviceName")).trim();if(!brandName||!adminName||!deviceName)return;const id=uuid();state={...cloneEmpty(),initialized:true,workspace:{id:uuid(),brandName,createdAt:timestamp()},currentAccountId:id,accounts:[{id,kind:"BRAND",name:adminName,org:brandName,role:"品牌管理员",deviceId:deviceName,location:"未设置",eventType:"VERIFY",eventLabel:"产品验证",canManageCodes:true}]};save();renderAll();toast("空白工作区已创建");};
+  if(pendingDeepLink){overlay.innerHTML=`<section class="onboarding-card public-verification-card"><div class="onboarding-brand">${icon("logo")}<div><b>ReliaCode 可靠码</b><small>公开产品验证</small></div></div><div id="public-verification-result">${emptyState("尚未连接生产验证服务","公开验证服务尚未配置。")}</div><button id="enter-local-workspace" class="secondary" type="button">进入本地运营工作区</button></section>`;$("#enter-local-workspace").onclick=()=>{pendingDeepLink=null;publicLoadToken+=1;history.replaceState({},"",location.pathname);renderOnboarding();};if(!publicLoadStarted&&sameOriginApiAvailable){publicLoadStarted=true;const token=++publicLoadToken;loadPublicVerification(pendingDeepLink,$("#public-verification-result"),token);}return;}
+  const hosted = persistentWorkspace;
+  if(hosted&&sessionUser&&currentRole()!=="BRAND_ADMIN"){
+    overlay.innerHTML=`<section class="onboarding-card"><div class="onboarding-brand">${icon("logo")}<div><b>ReliaCode 可靠码</b><small>组织工作区</small></div></div><h1>等待组织工作区</h1><p>当前账号已加入“${escapeHtml(sessionUser.organizationName||"组织")}”，但组织管理员尚未初始化共享工作区。请联系管理员完成设置。</p><button id="auth-logout-empty" class="secondary" type="button">退出登录</button></section>`;
+    $("#auth-logout-empty").onclick=async()=>{try{await serverRequest("/api/auth/logout",{method:"POST",headers:{"X-CSRF-Token":csrfToken}});}finally{location.reload();}};
+    return;
+  }
+  overlay.innerHTML=`<form id="workspace-form" class="onboarding-card"><div class="onboarding-brand">${icon("logo")}<div><b>ReliaCode 可靠码</b><small>${hosted?"创建你的品牌组织":"创建空白本地工作区"}</small></div></div><h1>${hosted?"完成品牌组织设置":"开始建立产品追溯"}</h1><p>${hosted?"这是你的组织私有工作区。现场人员、稽核和财务应通过组织邀请加入。":"系统不包含任何示例品牌或业务数据，内容仅保存在当前浏览器。"}</p><label>品牌或企业名称<input name="brandName" required maxlength="80" autocomplete="organization" /></label><label>管理员姓名<input name="adminName" required maxlength="40" autocomplete="name" value="${escapeHtml(sessionUser?.name||"")}" /></label><label>设备名称<input name="deviceName" required maxlength="80" value="当前浏览器" /></label><label class="consent"><input name="confirm" type="checkbox" required />我已了解当前部署的工作区边界和数据保存方式。</label><button class="primary" type="submit">${hosted?"创建品牌组织":"创建空白工作区"}</button></form>`;
+  $("#workspace-form").onsubmit=async(event)=>{event.preventDefault();const data=new FormData(event.currentTarget);const brandName=String(data.get("brandName")).trim(),adminName=String(data.get("adminName")).trim(),deviceName=String(data.get("deviceName")).trim();if(!brandName||!adminName||!deviceName)return;const id=sessionUser?.id||uuid();state={...cloneEmpty(),initialized:true,workspace:{id:uuid(),brandName,createdAt:timestamp()},currentAccountId:id,accounts:[{id,kind:"BRAND",name:adminName,org:brandName,roleCode:"BRAND_ADMIN",role:"品牌管理员",deviceId:deviceName,location:"未设置",eventType:"VERIFY",eventLabel:"产品验证",canManageCodes:true}]};ensureSessionAccount(sessionUser||state.accounts[0]);save();if(hosted){const saved=await persistNow();if(!saved||saveDirty)return;}renderAll();toast(hosted?"品牌组织已创建":"空白工作区已创建");};
 }
 
-async function loadPublicVerification(publicId){const out=$("#public-verification-result");if(!apiBaseUrl){out.innerHTML=`<div class="result-status amber-status">${icon("risk")}尚未连接生产验证服务</div><h2>此部署只能验证当前浏览器的数据</h2><p>公开验证接口已经具备，但当前 GitHub Pages 未配置生产 API。请由品牌方部署 API 后设置 <span class="code">runtime-config.js</span>。</p>`;return;}if(!/^[0-9a-f-]{36}$/i.test(publicId)){out.innerHTML=`<div class="result-status danger-status">${icon("risk")}验证地址无效</div>`;return;}try{const response=await fetch(`${apiBaseUrl}/api/public/v1/objects/${encodeURIComponent(publicId)}`,{headers:{Accept:"application/json"}}),body=await response.json();if(!response.ok)throw new Error(response.status===404?"未找到该产品":"验证服务暂时不可用");out.innerHTML=`<div class="result-status success-status">${icon("check")}产品身份有效</div><h2>${escapeHtml(body.product?.name)}</h2><div class="verify-facts"><div><small>GTIN</small><b>${escapeHtml(body.product?.gtin||"未公开")}</b></div><div><small>包装层级</small><b>${escapeHtml(body.object?.level)}</b></div><div><small>当前状态</small><b>${escapeHtml(body.object?.status)}</b></div><div><small>生产批次</small><b>${escapeHtml(body.object?.lot||"未公开")}</b></div></div><div class="mini-timeline">${(body.events||[]).map((event)=>`<div><span></span><p><b>${escapeHtml(event.type)}</b><small>${escapeHtml(localTime(event.time))}</small></p></div>`).join("")}</div>`;}catch(error){out.innerHTML=`<div class="result-status danger-status">${icon("risk")}无法完成验证</div><h2>${escapeHtml(error.message)}</h2><p>请保留包装和可靠码，稍后重试或联系品牌方。</p>`;}}
 
 function renderAccountOptions() {
-  const select=$("#account-select"); if(!select)return;
-  select.innerHTML=state.accounts.map((item)=>`<option value="${item.id}" ${item.id===state.currentAccountId?"selected":""}>${escapeHtml(item.org)} · ${escapeHtml(item.role)}</option>`).join("");
-  select.onchange=()=>{state.currentAccountId=select.value;save();renderAll();};
+  const current = account();
+  const workspaceName = $("#workspace-name");
+  const userName = $("#user-name");
+  const userRole = $("#user-role");
+  const avatar = $("#user-avatar");
+  if (workspaceName) workspaceName.textContent = state.workspace?.brandName || current?.org || "未登录";
+  if (userName) userName.textContent = sessionUser?.name || current?.name || "未登录";
+  if (userRole) userRole.textContent = roleLabel();
+  if (avatar) avatar.textContent = (sessionUser?.name || current?.name || "?").slice(0, 1).toUpperCase();
+  const context = $("#user-menu-context");
+  if (context) context.innerHTML = `<strong>${escapeHtml(state.workspace?.brandName || current?.org || "未登录")}</strong><span>${escapeHtml(sessionUser?.email || "")} · ${escapeHtml(roleLabel())}</span>`;
 }
 function updateChrome() {
   const current=account();
-  document.body.dataset.audience=current?.kind==="FIELD"?"field":"brand";
+  const role = currentRole();
+  const fieldRole = ["FACTORY_OPERATOR", "DISTRIBUTOR_RECEIVER", "STORE_RECEIVER"].includes(role);
+  document.body.dataset.audience=fieldRole?"field":"brand";
+  document.body.dataset.shell=fieldRole?"mobile-field":"desktop-management";
   $("#device-summary").innerHTML=current?`${icon("device")} ${escapeHtml(current.deviceId)}`:"";
   $("#updated-at").textContent=new Date().toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"});
   $("#risk-badge").textContent=state.risks.filter((item)=>item.status==="待处理").length;
   $("#brand-logo").innerHTML=icon("logo"); $("#agent-toggle").innerHTML=icon("agent")+"Agent"; $("#reset").innerHTML=icon("reset");
-  document.querySelectorAll(".nav-link").forEach((button)=>{if(!button.querySelector(".nav-svg"))button.insertAdjacentHTML("afterbegin",icon(button.dataset.icon||"package","nav-svg"));});
+  document.querySelectorAll(".nav-link").forEach((button)=>{
+    if(!button.querySelector(".nav-svg"))button.insertAdjacentHTML("afterbegin",icon(button.dataset.icon||"package","nav-svg"));
+    const required = String(button.dataset.capability || "").split(",").filter(Boolean);
+    button.hidden = required.length > 0 && !required.some((capability) => can(capability));
+  });
+  document.querySelectorAll(".nav-group").forEach((group)=>{
+    const next=[]; let node=group.nextElementSibling;
+    while(node && !node.classList.contains("nav-group")){if(!node.hidden)next.push(node);node=node.nextElementSibling;}
+    group.hidden=next.length===0;
+  });
+  ["codes","campaigns"].forEach((view)=>{const section=$("#"+view);if(section)section.hidden=!document.querySelector(`[data-view="${view}"]`)||document.querySelector(`[data-view="${view}"]`).hidden;});
+  document.querySelectorAll("[data-go]").forEach((element)=>{const target=document.querySelector(`[data-view="${element.dataset.go}"]`);if(target?.hidden)element.hidden=true;});
+  const userMenu=$("#user-menu"), popover=$("#user-menu-popover"), logout=$("#logout");
+  if(userMenu && popover && !userMenu.dataset.bound){
+    userMenu.dataset.bound="1";
+    userMenu.onclick=()=>{popover.hidden=!popover.hidden;userMenu.setAttribute("aria-expanded",String(!popover.hidden));};
+    document.addEventListener("click",(event)=>{if(!event.target.closest("#user-menu")&&!event.target.closest("#user-menu-popover")){popover.hidden=true;userMenu.setAttribute("aria-expanded","false");}});
+  }
+  if(logout && !logout.dataset.bound){logout.dataset.bound="1";logout.onclick=async()=>{try{if(persistentWorkspace)await serverRequest("/api/auth/logout",{method:"POST",headers:{"X-CSRF-Token":csrfToken}});}finally{sessionUser=null;state=cloneEmpty();localStorage.removeItem(STORAGE_KEY);location.reload();}};}
   const note=document.querySelector(".sidebar-note");
   note.innerHTML=`<b>本地工作区</b><p>无内置业务数据；内容仅保存在此浏览器。</p><div class="data-actions"><button id="export-workspace">导出备份</button><label>导入备份<input id="import-workspace" type="file" accept="application/json" /></label></div>`;
   $("#export-workspace").onclick=exportWorkspace; $("#import-workspace").onchange=importWorkspace;
@@ -124,11 +262,16 @@ async function openCamera(targetId){if(!navigator.mediaDevices?.getUserMedia)ret
 function closeCamera(){cancelAnimationFrame(cameraFrame);cameraFrame=0;cameraBusy=false;if(cameraStream){cameraStream.getTracks().forEach((track)=>track.stop());cameraStream=null;}const video=$("#camera-video");if(video)video.srcObject=null;const modal=$("#camera-modal");if(modal)modal.hidden=true;}
 
 const workTypes={PACKING:["聚合装箱","FACTORY"],SHIPPING:["发货","FIELD"],RECEIVING_DISTRIBUTOR:["渠道收货","FIELD"],RECEIVING_STORE:["门店收货","FIELD"],SELLING:["销售核验","FIELD"]};
-function renderReceive() { const current=account();$("#receive").innerHTML=`<div class="page-heading"><div><span class="section-kicker">现场作业</span><h2>账号驱动的扫码记录</h2><p>账号定义组织、设备、地点和允许事件；产品状态负责最终校验。</p></div></div><div class="two-column"><section class="panel"><div class="section-head"><div><h3>新增作业账号</h3><p>不预置任何工厂、渠道或门店</p></div></div><form id="account-form" class="compact-form"><label>人员姓名<input name="name" required maxlength="40" /></label><label>组织/网点<input name="org" required maxlength="100" /></label><label>作业类型<select name="eventType">${Object.entries(workTypes).map(([value,[label]])=>`<option value="${value}">${label}</option>`).join("")}</select></label><label>设备编号<input name="deviceId" required maxlength="80" /></label><label>作业地点<input name="location" required maxlength="100" /></label><button class="secondary" type="submit">创建作业账号</button></form></section><section class="panel"><div class="section-head"><div><h3>当前作业上下文</h3><p>${escapeHtml(current?.org||"")} · ${escapeHtml(current?.role||"")}</p></div></div>${current?.eventType!=="VERIFY"?`<label class="field-label">可靠码<input id="field-code" autocomplete="off" placeholder="扫描二维码、粘贴验证网址或可靠码" /></label><button class="secondary camera-trigger" type="button" data-camera-target="field-code">${icon("scan")}摄像头扫码</button>${current.eventType==="PACKING"?'<label class="field-label">目标箱码<input id="parent-code" autocomplete="off" placeholder="输入已生成的箱码" /></label>':""}<button id="validate-field" class="primary" type="button">核验作业</button><div id="field-result" class="scan-result empty">${emptyState("等待扫码","核验通过后仍需再次确认。")}</div>`:emptyState("当前是品牌管理账号","创建并切换到作业账号后执行扫码事件。")}</section></div>`;$("#account-form").onsubmit=addAccount;if($("#validate-field"))$("#validate-field").onclick=validateField;bindCameraButtons(); }
-function addAccount(event){event.preventDefault();const data=new FormData(event.currentTarget),eventType=String(data.get("eventType")),id=uuid();state.accounts.push({id,kind:"FIELD",name:String(data.get("name")).trim(),org:String(data.get("org")).trim(),role:workTypes[eventType][0]+"员",deviceId:String(data.get("deviceId")).trim(),location:String(data.get("location")).trim(),eventType,eventLabel:workTypes[eventType][0],canManageCodes:false});state.currentAccountId=id;save();renderAll();go("receive");toast("作业账号已创建并切换");}
-function validateField(){const current=account(),identity=scannedIdentity($("#field-code").value),found=object(identity),out=$("#field-result");if(!found)return fieldFailure(identity,"工作区中未找到该可靠码");const code=found.code;let nextStatus=found.status,parentCode=null;if(current.eventType==="PACKING"){const parent=object($("#parent-code").value);parentCode=parent?.code||null;if(found.level!=="ITEM"||found.status!=="COMMISSIONED")return fieldFailure(code,"只有待装箱单品可以执行聚合装箱");if(!parent||parent.level!=="CASE")return fieldFailure(code,"目标箱码不存在或不是箱码");nextStatus="PACKED";}else if(current.eventType==="SHIPPING"){if(!["COMMISSIONED","PACKED","RECEIVED"].includes(found.status))return fieldFailure(code,"当前状态不允许发货");nextStatus="IN_TRANSIT";}else if(["RECEIVING_DISTRIBUTOR","RECEIVING_STORE"].includes(current.eventType)){if(found.status!=="IN_TRANSIT")return fieldFailure(code,"只有运输中的产品可以收货");nextStatus="RECEIVED";}else if(current.eventType==="SELLING"){if(found.level!=="ITEM"||found.status!=="RECEIVED")return fieldFailure(code,"只有已收货单品可以销售核验");nextStatus="SOLD";}pendingFieldEvent={code,parentCode,nextStatus,accountId:current.id,eventType:current.eventType};out.innerHTML=`<div class="result-status success-status">${icon("check")}核验通过</div><h3 class="code">${escapeHtml(code)}</h3><p>${escapeHtml(product(found.productId)?.name)} · ${escapeHtml(found.status)} → ${escapeHtml(nextStatus)}</p><button id="confirm-field" class="primary" type="button">确认记录${escapeHtml(current.eventLabel)}</button>`;$("#confirm-field").onclick=confirmField;}
+function renderReceive() {
+  const current=account(), role=currentRole(), fieldCap=["FACTORY_OPERATOR","DISTRIBUTOR_RECEIVER","STORE_RECEIVER"].includes(role);
+  const eventType = current?.eventType || ({FACTORY_OPERATOR:"PACKING",DISTRIBUTOR_RECEIVER:"RECEIVING_DISTRIBUTOR",STORE_RECEIVER:"RECEIVING_STORE"}[role] || "VERIFY");
+  const eventLabel = current?.eventLabel || workTypes[eventType]?.[0] || "产品核验";
+  $("#receive").innerHTML=`<div class="page-heading"><div><span class="section-kicker">现场作业</span><h2>扫码核验与确认</h2><p>先核验对象和上下文，再确认会改变货权、库存或奖励状态的业务事件。</p></div></div><div class="two-column"><section class="panel field-context-panel"><div class="section-head"><div><h3>固定作业上下文</h3><p>上下文来自当前登录用户所属组织和设备，不支持在页面伪造切换。</p></div></div><dl class="scan-context"><div><dt>组织</dt><dd>${escapeHtml(current?.org||state.workspace?.brandName||"未绑定")}</dd></div><div><dt>地点</dt><dd>${escapeHtml(current?.location||"未绑定")}</dd></div><div><dt>设备</dt><dd>${escapeHtml(current?.deviceId||"当前会话设备")}</dd></div><div><dt>业务单据</dt><dd>${escapeHtml(current?.documentId||"由接口提供")}</dd></div><div><dt>事件类型</dt><dd>${escapeHtml(eventLabel)}</dd></div><div><dt>角色</dt><dd>${escapeHtml(ROLE_LABELS[role]||role)}</dd></div></dl></section><section class="panel"><div class="section-head"><div><h3>当前作业</h3><p>${escapeHtml(current?.org||state.workspace?.brandName||"")} · ${escapeHtml(ROLE_LABELS[role]||role)}</p></div></div>${fieldCap?`<label class="field-label">可靠码<input id="field-code" autocomplete="off" placeholder="扫描二维码、粘贴验证网址或可靠码" /></label><button class="secondary camera-trigger" type="button" data-camera-target="field-code">${icon("scan")}摄像头扫码</button>${eventType==="PACKING"?'<label class="field-label">目标箱码<input id="parent-code" autocomplete="off" placeholder="输入已生成的箱码" /></label>':""}<button id="validate-field" class="primary" type="button">1. 核验${escapeHtml(eventLabel)}</button><div id="field-result" class="scan-result empty">${emptyState("等待扫码","核验通过后仍需再次确认。")}</div>`:emptyState("当前角色没有现场写入能力","请使用组织管理员邀请的现场角色登录。")}</section></div>`;
+  if($("#validate-field"))$("#validate-field").onclick=validateField;bindCameraButtons();
+}
+function validateField(){const current=account(),role=currentRole(),eventType=current?.eventType||({FACTORY_OPERATOR:"PACKING",DISTRIBUTOR_RECEIVER:"RECEIVING_DISTRIBUTOR",STORE_RECEIVER:"RECEIVING_STORE"}[role]||""),eventLabel=current?.eventLabel||workTypes[eventType]?.[0]||"现场作业",identity=scannedIdentity($("#field-code").value),found=object(identity),out=$("#field-result");if(!found)return fieldFailure(identity,"工作区中未找到该可靠码");const code=found.code;let nextStatus=found.status,parentCode=null;if(eventType==="PACKING"){const parent=object($("#parent-code").value);parentCode=parent?.code||null;if(found.level!=="ITEM"||found.status!=="COMMISSIONED")return fieldFailure(code,"只有待装箱单品可以执行聚合装箱");if(!parent||parent.level!=="CASE")return fieldFailure(code,"目标箱码不存在或不是箱码");nextStatus="PACKED";}else if(eventType==="SHIPPING"){if(!["COMMISSIONED","PACKED","RECEIVED"].includes(found.status))return fieldFailure(code,"当前状态不允许发货");nextStatus="IN_TRANSIT";}else if(["RECEIVING_DISTRIBUTOR","RECEIVING_STORE"].includes(eventType)){if(found.status!=="IN_TRANSIT")return fieldFailure(code,"只有运输中的产品可以收货");nextStatus="RECEIVED";}else if(eventType==="SELLING"){if(found.level!=="ITEM"||found.status!=="RECEIVED")return fieldFailure(code,"只有已收货单品可以销售核验");nextStatus="SOLD";}pendingFieldEvent={code,parentCode,nextStatus,accountId:current.id,eventType,eventLabel,documentId:current?.documentId||null};out.innerHTML=`<div class="result-status success-status">${icon("check")}核验通过</div><h3 class="code">${escapeHtml(code)}</h3><p>${escapeHtml(product(found.productId)?.name)} · ${escapeHtml(found.status)} → ${escapeHtml(nextStatus)}</p><button id="confirm-field" class="primary" type="button">2. 确认记录${escapeHtml(eventLabel)}</button>`;$("#confirm-field").onclick=confirmField;}
 function fieldFailure(code,reason){state.risks.unshift({id:uuid(),code,status:"待处理",level:"中风险",title:"现场作业校验失败",rule:"状态或对象不满足作业规则",evidence:reason,time:timestamp(),decision:"未处置"});appendEvent({action:"FIELD_REJECTED",code:code||"未输入",result:reason});save();$("#field-result").innerHTML=`<div class="result-status danger-status">${icon("risk")}不可确认</div><p>${escapeHtml(reason)}</p>`;renderRiskBadge();}
-function confirmField(){if(!pendingFieldEvent)return;const pending=pendingFieldEvent,current=account();if(current?.id!==pending.accountId)return toast("账号已变化，请重新核验");const found=object(pending.code);if(!found)return toast("对象已不存在");if(pending.eventType==="PACKING"){const parent=object(pending.parentCode);found.parent=parent.code;if(!parent.children.includes(found.code))parent.children.push(found.code);}found.status=pending.nextStatus;found.currentOrg=current.org;const event=appendEvent({action:pending.eventType,code:found.code,result:`${current.eventLabel}已确认`});applyReward(event,found,current);pendingFieldEvent=null;save();renderAll();go("receive");toast(`${current.eventLabel}已记录`);}
+function confirmField(){if(!pendingFieldEvent)return;const pending=pendingFieldEvent,current=account();if(current?.id!==pending.accountId)return toast("会话上下文已变化，请重新核验");const found=object(pending.code);if(!found)return toast("对象已不存在");if(pending.eventType==="PACKING"){const parent=object(pending.parentCode);if(!parent)return toast("目标箱码不存在");found.parent=parent.code;if(!parent.children.includes(found.code))parent.children.push(found.code);}found.status=pending.nextStatus;found.currentOrg=current.org;const event=appendEvent({action:pending.eventType,code:found.code,result:`${pending.eventLabel}已确认`});event.documentId=pending.documentId;applyReward(event,found,current);pendingFieldEvent=null;save();renderAll();go("receive");toast(`${pending.eventLabel}已记录`);}
 
 function renderCampaigns(){const cards=state.campaigns.map((item)=>`<article class="campaign-card"><div class="campaign-title"><div><span class="code">${escapeHtml(item.id)}</span><h3>${escapeHtml(item.name)}</h3><p>${escapeHtml(workTypes[item.trigger]?.[0]||item.trigger)} · ${item.reward} 积分/对象</p></div>${tag(item.status)}</div><div class="campaign-facts"><div><span>开始</span><b>${escapeHtml(item.startsAt)}</b></div><div><span>结束</span><b>${escapeHtml(item.endsAt)}</b></div><div><span>冻结</span><b>${item.holdDays} 天</b></div><div><span>预算</span><b>${item.used.toLocaleString()} / ${item.budget.toLocaleString()}</b></div></div></article>`).join("");$("#campaigns").innerHTML=`<div class="page-heading"><div><span class="section-kicker">激励运营</span><h2>奖励活动</h2><p>活动只奖励当前工作区后续产生的首次有效事件。</p></div></div><section class="panel"><div class="section-head"><div><h3>创建活动</h3><p>不预置奖励金额或适用范围</p></div></div><form id="campaign-form" class="compact-form"><label>活动名称<input name="name" required maxlength="100" /></label><label>触发事件<select name="trigger"><option value="RECEIVING_DISTRIBUTOR">渠道收货</option><option value="RECEIVING_STORE">门店收货</option><option value="SELLING">销售核验</option></select></label><label>每次积分<input name="reward" type="number" min="1" max="1000000" required /></label><label>总预算积分<input name="budget" type="number" min="1" max="1000000000" required /></label><label>冻结天数<input name="holdDays" type="number" min="0" max="365" required /></label><label>开始日期<input name="startsAt" type="date" required /></label><label>结束日期<input name="endsAt" type="date" required /></label><button class="primary" type="submit">创建并启用活动</button></form></section><section class="panel">${cards||emptyState("暂无奖励活动","创建活动后，符合条件的新事件才会产生奖励。")}</section>`;$("#campaign-form").onsubmit=addCampaign;}
 function addCampaign(event){event.preventDefault();const data=new FormData(event.currentTarget),startsAt=String(data.get("startsAt")),endsAt=String(data.get("endsAt")),reward=Number(data.get("reward")),budget=Number(data.get("budget"));if(endsAt<startsAt)return toast("结束日期必须晚于开始日期");if(budget<reward)return toast("总预算不能小于单次奖励");state.campaigns.unshift({id:uuid(),name:String(data.get("name")).trim(),trigger:String(data.get("trigger")),reward,budget,used:0,holdDays:Number(data.get("holdDays")),startsAt,endsAt,status:"进行中",createdAt:timestamp()});save();renderAll();go("campaigns");toast("奖励活动已创建");}
@@ -138,12 +281,27 @@ function renderRiskBadge(){const badge=$("#risk-badge");if(badge)badge.textConte
 function renderRisk(){const rows=state.risks.map((item)=>`<article class="risk"><div><div>${tag(item.level)} ${tag(item.status)} <b>${escapeHtml(item.title)}</b></div><p><span class="code">${escapeHtml(item.code)}</span> · ${escapeHtml(item.rule)}</p><p class="muted">${escapeHtml(item.evidence)} · ${escapeHtml(localTime(item.time))}</p></div>${item.status==="待处理"?`<div class="risk-actions"><button class="secondary" data-risk="${item.id}" data-action="已关闭">关闭</button><button class="secondary danger" data-risk="${item.id}" data-action="已拒绝">拒绝本次作业</button></div>`:""}</article>`).join("");$("#risk").innerHTML=`<div class="page-heading"><div><span class="section-kicker">风险治理</span><h2>扫码风险处置</h2><p>风险仅由当前工作区真实失败作业产生。</p></div></div><section class="panel">${rows||emptyState("暂无风险事件","异常或不满足状态的扫码会进入这里。")}</section>`;document.querySelectorAll("[data-risk]").forEach((button)=>button.onclick=()=>{const item=state.risks.find((risk)=>risk.id===button.dataset.risk);if(!item)return;item.status=button.dataset.action;item.decision=`${account().name} · ${localTime()}`;save();renderAll();go("risk");});}
 
 function exportWorkspace(){state.workspace.lastExportAt=timestamp();save();downloadFile(`reliacode-workspace-${new Date().toISOString().slice(0,10)}.json`,JSON.stringify(state,null,2),"application/json");toast("工作区备份已导出");}
-async function importWorkspace(event){const file=event.target.files?.[0];if(!file)return;try{const value=JSON.parse(await file.text());if(value?.schemaVersion!==1||!value.initialized||!value.workspace||!Array.isArray(value.products)||typeof value.objects!=="object")throw new Error("文件结构不符合 ReliaCode 工作区格式");if(!confirm(`导入“${value.workspace.brandName}”并覆盖当前工作区？`))return;state=value;save();location.reload();}catch(error){toast(`导入失败：${error.message}`);}finally{event.target.value="";}}
+async function importWorkspace(event){const file=event.target.files?.[0];if(!file)return;try{const value=JSON.parse(await file.text());if(!workspacePayloadValid(value))throw new Error("文件结构不符合 ReliaCode 工作区格式");if(!confirm(`导入“${value.workspace.brandName}”并覆盖当前工作区？`))return;state=value;save();if(!persistentWorkspace){location.reload();return;}const persisted=await persistNow();if(persisted&&!saveDirty){localStorage.removeItem(STORAGE_KEY);location.reload();}else showPersistenceStatus("导入数据尚未保存到服务器，页面未刷新。请检查网络后重试。");}catch(error){toast(`导入失败：${error.message}`);}finally{event.target.value="";}}
 function clearWorkspace(){if(!confirm("这会清除当前浏览器中的全部产品、可靠码、事件、活动、账本和账号。请先导出备份。确定继续？"))return;if(!confirm("再次确认：清除后无法撤销。"))return;localStorage.removeItem(STORAGE_KEY);location.reload();}
 
 const titles={dashboard:["运营总览","品牌管理 / 运营总览"],codes:["产品与批量生码","品牌管理 / 产品与批量生码"],movement:["产品动向","品牌管理 / 产品动向"],verify:["扫码验证","产品核验 / 扫码验证"],receive:["业务扫码","现场作业 / 业务扫码"],campaigns:["奖励活动","激励与治理 / 奖励活动"],ledger:["奖励账本","激励与治理 / 奖励账本"],risk:["风险处置","激励与治理 / 风险处置"]};
-function go(view){const button=document.querySelector(`[data-view="${view}"]`);if(!button)return;document.querySelectorAll(".nav-link,.view").forEach((node)=>node.classList.remove("active"));button.classList.add("active");$("#"+view).classList.add("active");$("#page-title").textContent=titles[view][0];$("#breadcrumb").textContent=titles[view][1];}
-function renderAll(){renderOnboarding();if(!state.initialized)return;renderDashboard();renderCodes();renderMovement();renderVerify();renderReceive();renderCampaigns();renderLedger();renderRisk();renderAccountOptions();updateChrome();renderAgent();if(pendingDeepLink){const value=pendingDeepLink;pendingDeepLink=null;history.replaceState({},"",location.pathname);go("verify");$("#verify-code").value=value;verifyCode(value);}}
+function go(view){const button=document.querySelector(`[data-view="${view}"]`);if(!button||button.hidden)return;document.querySelectorAll(".nav-link,.view").forEach((node)=>node.classList.remove("active"));button.classList.add("active");$("#"+view).classList.add("active");$("#page-title").textContent=titles[view][0];$("#breadcrumb").textContent=titles[view][1];}
+function renderAll(){
+  renderOnboarding();
+  if(!state.initialized)return;
+  const role=currentRole(), previousView=$(".view.active")?.id||$(".nav-link.active")?.dataset.view||null;
+  const roleChanged=lastRenderedRole===null||lastRenderedRole!==role;
+  renderDashboard();renderCodes();renderMovement();renderVerify();renderReceive();renderCampaigns();renderLedger();renderRisk();renderAccountOptions();updateChrome();renderAgent();
+  const preferred=ROLE_DEFAULT_VIEW[role]||"dashboard";
+  const currentButton=previousView&&document.querySelector(`[data-view="${previousView}"]`);
+  const target=roleChanged||!currentButton||currentButton.hidden?preferred:previousView;
+  if(document.querySelector(`[data-view="${target}"]`)?.hidden){
+    const firstVisible=[...document.querySelectorAll(".nav-link")].find((button)=>!button.hidden);
+    if(firstVisible)go(firstVisible.dataset.view);
+  } else go(target);
+  lastRenderedRole=role;
+  if(pendingDeepLink){const value=pendingDeepLink;pendingDeepLink=null;history.replaceState({},"",location.pathname);go("verify");$("#verify-code").value=value;verifyCode(value);}
+}
 
 function openAgent(){agentReturnFocus=document.activeElement;const drawer=$("#agent-drawer");drawer.hidden=false;drawer.inert=false;requestAnimationFrame(()=>drawer.classList.add("open"));$("#agent-backdrop").hidden=false;renderAgent();$("#agent-command").focus();}
 function closeAgent(){const drawer=$("#agent-drawer");drawer.classList.remove("open");drawer.inert=true;$("#agent-backdrop").hidden=true;agentReturnFocus?.focus();}
@@ -171,4 +329,45 @@ document.addEventListener("click",(event)=>{const target=event.target.closest("[
 document.querySelectorAll(".nav-link").forEach((button)=>button.onclick=()=>go(button.dataset.view));
 $("#agent-toggle").onclick=openAgent;$("#agent-close").onclick=closeAgent;$("#agent-backdrop").onclick=closeAgent;$("#agent-drawer").inert=true;$("#agent-form").onsubmit=(event)=>{event.preventDefault();executeAgent($("#agent-command").value);$("#agent-command").value="";};$("#reset").onclick=clearWorkspace;$("#camera-close").innerHTML=icon("close");$("#camera-close").onclick=closeCamera;
 document.addEventListener("keydown",(event)=>{if(event.key==="Escape"&&!$("#camera-modal").hidden)closeCamera();else if(event.key==="Escape"&&$("#agent-drawer").classList.contains("open"))closeAgent();});
-renderAll();
+async function loadServerWorkspace({allowMigration=false}={}){try{const result=parseWorkspaceResponse(await serverRequest('/api/v1/workspace'),{allowUninitialized:true});state=result.workspace;serverVersion=result.version;}catch(error){if(error.status!==404)throw error;if(allowMigration&&state?.initialized&&confirm('Migrate local workspace to server?')){saveDirty=true;saveRevision+=1;saveRetryAttempt=0;const migrated=await persistNow();if(!migrated||saveDirty)return;localStorage.removeItem(STORAGE_KEY);location.reload();return;}state=cloneEmpty();serverVersion=0;}}
+const localClearWorkspace=clearWorkspace;clearWorkspace=async function(){if(!persistentWorkspace)return localClearWorkspace();if(!confirm('Reset the server workspace? Export a local backup first.'))return;try{const result=await serverRequest('/api/v1/workspace/reset',{method:'POST',headers:{'X-CSRF-Token':csrfToken}});if(result.workspace){const parsed=parseWorkspaceResponse(result,{allowUninitialized:true});state=parsed.workspace;serverVersion=parsed.version;}localStorage.removeItem(STORAGE_KEY);location.reload();}catch(error){showPersistenceStatus(error.status===404?'Server reset is not available; nothing was cleared.':'Server reset failed; nothing was cleared.');}};$('#reset').onclick=clearWorkspace;
+const originalToast=toast;toast=(message)=>{if(String(message).includes('Workspace changed')){saveDirty=true;saveConflict={status:409};showPersistenceStatus('Workspace conflict: local changes are not saved.',[{label:'Reload server',onClick:async()=>{try{const result=parseWorkspaceResponse(await serverRequest('/api/v1/workspace'),{allowUninitialized:true});state=result.workspace;serverVersion=result.version;saveDirty=false;saveConflict=null;clearPersistenceStatus();renderAll();}catch(error){originalToast(error.message);}}},{label:'Export local copy',onClick:()=>exportWorkspaceSnapshot()}]);return;}originalToast(message);};
+async function loadPublicVerification(publicId,target,token){
+  const out=target||$('#public-verification-result');
+  const isCurrent=()=>Boolean(out&&out.isConnected&&out===$('#public-verification-result')&&(token===undefined||token===publicLoadToken));
+  if(!isCurrent())return;
+  if(!sameOriginApiAvailable){out.textContent="尚未连接生产验证服务";return;}
+  if(!/^[0-9a-f-]{36}$/i.test(publicId)){if(isCurrent())out.textContent='Verification address is invalid';return;}
+  try{
+    const response=await fetch(apiUrl('/api/public/v1/objects/'+encodeURIComponent(publicId)),{headers:{Accept:'application/json'}});
+    const body=await response.json().catch(()=>({}));
+    if(!response.ok)throw new Error(body.message||'Verification service is unavailable');
+    if(!isCurrent())return;
+    out.innerHTML='<div class="result-status success-status">'+icon('check')+' Verified</div><h2>'+escapeHtml(body.product?.name||'Product')+'</h2>';
+  }catch(error){if(isCurrent())out.textContent='Verification unavailable: '+error.message;}
+}
+if(pendingDeepLink)renderOnboarding();else if(!persistentWorkspace)renderAll();
+async function bootstrap() { if (!persistentWorkspace) { if (state.initialized) ensureSessionAccount(account()); renderAll(); return; } try { const session=await serverRequest('/api/auth/session'); csrfToken=session.csrfToken; sessionUser=session.user; await loadServerWorkspace({allowMigration:session.user?.id==='local-admin'}); ensureSessionAccount(session.user); serverReady=true; renderAll(); } catch (error) { showLogin(); } }
+function showLogin() {
+  if(pendingDeepLink)return;
+  const overlay=$('#onboarding')||document.body.appendChild(Object.assign(document.createElement('div'),{id:'onboarding',className:'onboarding'}));
+  overlay.hidden=false;
+  const renderAuth=(mode='login')=>{
+    const registering=mode==='register';
+    overlay.innerHTML=`<form id="server-auth" class="onboarding-card auth-card"><div class="onboarding-brand">${icon('logo')}<div><b>ReliaCode 可靠码</b><small>组织工作区与成员权限</small></div></div><div class="auth-tabs" role="tablist"><button type="button" data-auth-mode="login" class="${registering?'':'active'}">登录</button><button type="button" data-auth-mode="register" class="${registering?'active':''}">注册</button></div><h1>${registering?'创建账号':'欢迎回来'}</h1>${registering?'<div class="registration-purpose" role="group" aria-label="注册目的"><button type="button" class="purpose-card active" data-purpose="create"><strong>创建品牌组织</strong><span>公开注册，成为品牌管理员</span></button><button type="button" class="purpose-card" data-purpose="invite"><strong>接受组织邀请</strong><span>需要管理员提供邀请链接或邀请码</span></button></div>':''}<p id="auth-description">${registering?'注册将创建一个新的品牌组织并成为其管理员。':'使用用户名或邮箱登录，角色由组织成员关系决定。'}</p><label>用户名<input name="username" required minlength="${registering?3:1}" maxlength="32" autocomplete="username" placeholder="3–32 个字符" /></label>${registering?'<label>邮箱<input name="email" type="email" required maxlength="254" autocomplete="email" placeholder="name@example.com" /></label>':''}<label>密码<input name="password" type="password" required minlength="${registering?10:1}" maxlength="200" autocomplete="${registering?'new-password':'current-password'}" placeholder="${registering?'至少 10 位，包含字母和数字':'请输入密码'}" /></label>${registering?'<label>确认密码<input name="confirmPassword" type="password" required minlength="10" maxlength="200" autocomplete="new-password" placeholder="再次输入密码" /></label><label id="invite-code-field" hidden>邀请码<input name="inviteCode" maxlength="160" autocomplete="one-time-code" placeholder="粘贴组织管理员发来的邀请码" /></label>':''}<button class="primary" type="submit">${registering?'创建品牌组织':'登录'}</button><p id="login-error" class="auth-error" role="alert"></p><p class="auth-note">密码仅以加盐 scrypt 哈希保存，不会保存明文；业务角色不由登录方式决定。</p></form>`;
+    overlay.querySelectorAll('[data-auth-mode]').forEach((button)=>button.onclick=()=>renderAuth(button.dataset.authMode));
+    if(registering){overlay.querySelectorAll('[data-purpose]').forEach((button)=>button.onclick=()=>{const invite=button.dataset.purpose==='invite';overlay.querySelectorAll('[data-purpose]').forEach((item)=>item.classList.toggle('active',item===button));$('#invite-code-field').hidden=!invite;$('#auth-description').textContent=invite?'输入组织管理员提供的邀请码，加入其组织并获得对应角色。':'注册将创建一个新的品牌组织并成为其管理员。';$('#server-auth button[type="submit"]').textContent=invite?'接受邀请':'创建品牌组织';});}
+    $('#server-auth').onsubmit=async(event)=>{
+      event.preventDefault();const data=new FormData(event.currentTarget);const password=String(data.get('password'));
+      if(registering&&password!==String(data.get('confirmPassword'))){$('#login-error').textContent='两次输入的密码不一致';return;}
+      const invite=registering&&event.currentTarget.querySelector('[data-purpose].active')?.dataset.purpose==='invite';
+      const payload=invite?{token:String(data.get('inviteCode')).trim(),username:String(data.get('username')).trim(),email:String(data.get('email')).trim(),password}:{username:String(data.get('username')).trim(),password};
+      if(registering&&!invite)payload.email=String(data.get('email')).trim();
+      if(invite&&!payload.token){$('#login-error').textContent='请输入组织邀请码';return;}
+      try{const result=await serverRequest(invite?'/api/auth/invitations/accept':(registering?'/api/auth/register':'/api/auth/login'),{method:'POST',body:JSON.stringify(payload)});csrfToken=result.csrfToken;sessionUser=result.user;if(registering){localStorage.removeItem(STORAGE_KEY);state=cloneEmpty();}await loadServerWorkspace({allowMigration:!invite&&!registering&&result.user?.id==='local-admin'});ensureSessionAccount(result.user);serverReady=true;renderAll();}
+      catch(error){$('#login-error').textContent=error.message||(registering?'注册失败':'登录失败');}
+    };
+  };
+  renderAuth('login');
+}
+bootstrap();

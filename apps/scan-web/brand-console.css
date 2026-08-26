@@ -75,6 +75,18 @@
   color: var(--text-3);
   font-size: 11px;
 }
+.workspace-switcher,.user-menu { border:1px solid var(--line-strong); border-radius:8px; background:#fff; color:var(--ink); cursor:pointer; }
+.workspace-switcher { display:flex; flex-direction:column; align-items:flex-start; min-width:145px; padding:6px 11px; text-align:left; }
+.workspace-switcher-label { color:var(--text-3); font-size:10px; }
+.workspace-switcher strong { max-width:190px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:12px; }
+.user-menu { display:flex; align-items:center; gap:8px; padding:5px 9px 5px 5px; text-align:left; }
+.user-menu b,.user-menu small { display:block; line-height:1.25; }
+.user-menu b { font-size:11px; }.user-menu small { color:var(--text-3); font-size:10px; }
+.user-avatar { width:26px; height:26px; display:grid; place-items:center; border-radius:50%; color:#fff; background:var(--brand); font-size:11px; font-weight:700; }
+.user-menu-popover { position:absolute; z-index:30; top:62px; right:24px; width:230px; padding:10px; border:1px solid var(--line); border-radius:10px; background:#fff; box-shadow:0 10px 30px #10251f22; }
+.user-menu-popover[hidden] { display:none; }.user-menu-popover div { padding:5px 7px 9px; border-bottom:1px solid var(--line); }
+.user-menu-popover div strong,.user-menu-popover div span { display:block; }.user-menu-popover div span { margin-top:3px; color:var(--text-3); font-size:10px; }
+.user-menu-popover button { width:100%; margin-top:8px; padding:8px; border:0; border-radius:7px; color:#9b3333; background:#fff3f3; text-align:left; cursor:pointer; }
 .account-switcher select {
   min-width: 230px;
   height: 36px;
@@ -88,6 +100,15 @@
 .device-summary { display: inline-flex; align-items: center; gap: 6px; color: var(--text-2); font-size: 11px; }
 .device-summary svg { width: 16px; height: 16px; }
 .updated-at { min-width: 38px; }
+.scan-context { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; margin:0; }
+.scan-context div { padding:10px; border:1px solid var(--line); border-radius:8px; background:var(--subtle); }
+.scan-context dt { color:var(--text-3); font-size:10px; }.scan-context dd { margin:3px 0 0; color:var(--ink); font-size:12px; font-weight:700; overflow-wrap:anywhere; }
+.registration-purpose { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; margin:15px 0; }
+.purpose-card { padding:11px; border:1px solid var(--line); border-radius:9px; background:#fff; color:var(--ink); text-align:left; cursor:pointer; }
+.purpose-card.active { border-color:var(--brand); background:var(--brand-soft); }.purpose-card strong,.purpose-card span { display:block; }.purpose-card span { margin-top:3px; color:var(--text-2); font-size:11px; }
+body[data-shell="mobile-field"] .sidebar { background:#113d38; }
+body[data-shell="mobile-field"] main { max-width:720px; }
+body[data-shell="mobile-field"] .field-context-panel { border-color:#b9ddd4; }
 .icon-button {
   width: 36px;
   height: 36px;
@@ -506,6 +527,11 @@
 .onboarding-card .consent { display: flex; grid-template-columns: 18px 1fr; align-items: flex-start; gap: 10px; margin: 18px 0; font-weight: 400; line-height: 1.6; }
 .onboarding-card .consent input { width: 18px; min-height: 18px; margin-top: 2px; }
 .onboarding-card > button { width: 100%; min-height: 46px; }
+.auth-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; margin: 0 0 24px; padding: 4px; background: #edf2ef; }
+.auth-tabs button { min-height: 38px; border: 0; color: var(--text-2); background: transparent; font: inherit; font-weight: 700; cursor: pointer; }
+.auth-tabs button.active { color: #fff; background: var(--brand); }
+.auth-card .auth-error { min-height: 22px; margin: 12px 0 0; color: #a82424; font-size: 13px; }
+.auth-card .auth-note { margin: 14px 0 0; color: var(--text-3); font-size: 12px; text-align: center; }
 .two-column { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 16px; margin-bottom: 16px; }
 .compact-form { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 4px 12px; }
 .compact-form button { align-self: end; min-height: 42px; margin-bottom: 14px; }

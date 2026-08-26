@@ -19,16 +19,16 @@
         </div>
         <nav id="main-nav">
           <p class="nav-group brand-only">品牌管理</p>
-          <button class="nav-link active" data-view="dashboard" data-icon="dashboard"><span>运营总览</span></button>
-          <button class="nav-link brand-only" data-view="codes" data-icon="codes"><span>批量生码</span></button>
-          <button class="nav-link brand-only" data-view="movement" data-icon="movement"><span>产品动向</span></button>
-          <button class="nav-link" data-view="verify" data-icon="verify"><span>扫码验证</span></button>
+          <button class="nav-link active brand-only" data-view="dashboard" data-capability="events:read" data-icon="dashboard"><span>运营总览</span></button>
+          <button class="nav-link brand-only" data-view="codes" data-capability="codes:write" data-icon="codes"><span>批量生码</span></button>
+          <button class="nav-link brand-only" data-view="movement" data-capability="events:read" data-icon="movement"><span>产品动向</span></button>
+          <button class="nav-link" data-view="verify" data-capability="objects:read" data-icon="verify"><span>扫码验证</span></button>
           <p class="nav-group field-only">现场作业</p>
-          <button class="nav-link" data-view="receive" data-icon="scan"><span>业务扫码</span></button>
+          <button class="nav-link" data-view="receive" data-capability="events:write:packing,events:write:distributor_receiving,events:write:store_receiving" data-icon="scan"><span>业务扫码</span></button>
           <p class="nav-group brand-only">激励与治理</p>
-          <button class="nav-link brand-only" data-view="campaigns" data-icon="campaign"><span>奖励活动</span></button>
-          <button class="nav-link brand-only" data-view="ledger" data-icon="ledger"><span>奖励账本</span></button>
-          <button class="nav-link brand-only" data-view="risk" data-icon="risk"><span>风险处置</span><span id="risk-badge" class="nav-badge">2</span></button>
+          <button class="nav-link brand-only" data-view="campaigns" data-capability="campaigns:write" data-icon="campaign"><span>奖励活动</span></button>
+          <button class="nav-link brand-only" data-view="ledger" data-capability="ledger:read,ledger:read:self" data-icon="ledger"><span>奖励账本</span></button>
+          <button class="nav-link brand-only" data-view="risk" data-capability="risks:review" data-icon="risk"><span>风险处置</span><span id="risk-badge" class="nav-badge">0</span></button>
         </nav>
         <div class="sidebar-note"><b>本地工作区</b><br />首次打开后创建品牌工作区，不包含预置业务数据。</div>
       </aside>
@@ -37,9 +37,15 @@
           <div class="topbar-title"><p class="eyebrow" id="breadcrumb">品牌管理 / 运营总览</p><h1 id="page-title">运营总览</h1></div>
           <div class="identity">
             <span class="environment-pill">本地优先版</span>
-            <label class="account-switcher">当前账号
-              <select id="account-select" aria-label="切换工作账号"></select>
-            </label>
+            <button id="workspace-switcher" class="workspace-switcher" type="button" aria-label="当前组织工作区" aria-controls="user-menu-context">
+              <span class="workspace-switcher-label">组织工作区</span><strong id="workspace-name">未登录</strong>
+            </button>
+            <button id="user-menu" class="user-menu" type="button" aria-expanded="false" aria-haspopup="menu">
+              <span id="user-avatar" class="user-avatar" aria-hidden="true">?</span><span><b id="user-name">未登录</b><small id="user-role">未登录</small></span>
+            </button>
+            <div id="user-menu-popover" class="user-menu-popover" role="menu" hidden>
+              <div id="user-menu-context"></div><button id="logout" type="button">退出登录</button>
+            </div>
             <span id="device-summary" class="device-summary"></span>
             <span id="updated-at" class="updated-at"></span>
             <button id="agent-toggle" class="agent-toggle" aria-label="打开 Agent 操作中心"></button>

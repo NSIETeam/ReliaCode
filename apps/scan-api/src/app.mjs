@@ -4,7 +4,7 @@ import rateLimit from "@fastify/rate-limit";
 import Fastify from "fastify";
 import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
-import { createAuthenticator } from "./auth.mjs";
+import { createAuthenticator, hashToken } from "./auth.mjs";
 import { registerRoutes } from "./routes.mjs";
 import { REQUIRED_SCHEMA_VERSION } from "./schema-version.mjs";
 
@@ -12,14 +12,14 @@ export async function buildApp({ config, db }) {
   const app = Fastify({
     logger: { level: config.LOG_LEVEL, redact: ["req.headers.authorization", "req.headers.cookie", "request.body.password", "request.body.token"] },
     trustProxy: config.TRUST_PROXY,
-    bodyLimit: 1_048_576,
+    bodyLimit: 5 * 1024 * 1024,
     requestIdHeader: "x-request-id",
     genReqId: (request) => request.headers["x-request-id"] || randomUUID()
   });
   await app.register(helmet, {
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
-    strictTransportSecurity: config.NODE_ENV === "production" ? { maxAge: 31_536_000, includeSubDomains: true, preload: true } : false
+    strictTransportSecurity: config.NODE_ENV === "production" && config.SESSION_COOKIE_SECURE ? { maxAge: 31_536_000, includeSubDomains: true, preload: true } : false
   });
   await app.register(cors, {
     origin(origin, callback) {
@@ -27,19 +27,32 @@ export async function buildApp({ config, db }) {
       return callback(new Error("Origin is not allowed"), false);
     },
     credentials: true,
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id", "X-ReliaCode-Principal"]
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id", "X-ReliaCode-Principal", "X-CSRF-Token"]
   });
   await app.register(rateLimit, { max: 300, timeWindow: "1 minute", ban: 3, keyGenerator: (request) => request.ip });
 
-  const authenticate = await createAuthenticator(config);
+  const authenticate = await createAuthenticator({ ...config, db });
+  const loginAttempts = new Map();
+  if (config.NODE_ENV === "production" && config.AUTH_MODE === "local" && !config.SESSION_COOKIE_SECURE) app.log.warn("INSECURE HTTP session cookies are enabled; use HTTPS as soon as possible");
   app.decorateRequest("principal", null);
   app.addHook("onRequest", async (request, reply) => {
-    if (request.url === "/health/live" || request.url === "/health/ready" || request.url.startsWith("/api/public/")) return;
+    const invitationAccept = request.url.split("?",1)[0] === "/api/auth/invitations/accept";
+    const hasAuthCredentials = Boolean(request.headers.authorization || request.headers.cookie);
+    if (request.url === "/health/live" || request.url === "/health/ready" || request.url.startsWith("/api/public/") || request.url === "/api/auth/login" || request.url === "/api/auth/register" || (invitationAccept && !hasAuthCredentials)) return;
     try { request.principal = await authenticate(request); } catch (error) {
       request.log.warn({ error: error.message }, "authentication failed");
     }
     if (!request.principal) return reply.code(401).send({ code:"UNAUTHORIZED", message:"A valid access token is required", requestId:request.id });
+    if (config.AUTH_MODE === "local") {
+      if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
+        const origin = request.headers.origin;
+        if (origin && !config.corsOrigins.includes(origin)) return reply.code(403).send({ code:"ORIGIN_NOT_ALLOWED", message:"Origin is not allowed", requestId:request.id });
+        const supplied = String(request.headers["x-csrf-token"] || "");
+        if (!supplied || hashToken(supplied) !== request.authSession.csrf_token_hash) return reply.code(403).send({ code:"CSRF_INVALID", message:"CSRF token is invalid", requestId:request.id });
+      }
+      return;
+    }
     const scope = await db.query(
       `SELECT EXISTS(SELECT 1 FROM tenants t JOIN organizations o ON o.tenant_id=t.id
        WHERE t.id=$1 AND o.id=$2 AND t.status='ACTIVE' AND o.status='ACTIVE') active`,
@@ -74,7 +87,7 @@ export async function buildApp({ config, db }) {
     }
     catch { return reply.code(503).send({ status:"not_ready" }); }
   });
-  registerRoutes(app, { db });
+  registerRoutes(app, { db, config, loginAttempts });
 
   app.setNotFoundHandler((request, reply) => reply.code(404).send({ code:"NOT_FOUND", message:"Route not found", requestId:request.id }));
   app.setErrorHandler((error, request, reply) => {

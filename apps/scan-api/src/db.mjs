@@ -6,7 +6,7 @@ export function createDatabase(config) {
   const pool = new Pool({
     connectionString: config.DATABASE_URL,
     ssl: config.DATABASE_SSL ? { rejectUnauthorized: true } : false,
-    max: 20,
+    max: config.DB_POOL_MAX || 5,
     idleTimeoutMillis: 30_000,
     connectionTimeoutMillis: 5_000,
     application_name: "reliacode-scan-api"

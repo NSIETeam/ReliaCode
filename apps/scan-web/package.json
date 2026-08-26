@@ -9,7 +9,8 @@
     "test:e2e": "node tests/e2e.mjs",
     "test:mobile": "node tests/mobile-and-edge.mjs",
     "test:agent": "node tests/agent.mjs",
-    "test": "npm run test:e2e && npm run test:mobile && npm run test:agent"
+    "test:persistence": "node tests/persistence.test.mjs",
+    "test": "npm run test:persistence && npm run test:e2e && npm run test:mobile && npm run test:agent"
   },
   "devDependencies": {
     "jsqr": "^1.4.0",

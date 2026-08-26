@@ -1,3 +1,4 @@
 window.RELIACODE_CONFIG = Object.freeze({
-  apiBaseUrl: ""
+  apiBaseUrl: "",
+  persistentWorkspace: false
 });

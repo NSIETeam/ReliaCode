@@ -14,10 +14,21 @@ const schema = z.object({
   DATABASE_URL: z.string().min(1).optional(),
   DATABASE_URL_FILE: z.string().min(1).optional(),
   DATABASE_SSL: boolean.default(false),
-  AUTH_MODE: z.enum(["oidc", "development"]).default("oidc"),
+  DB_POOL_MAX: z.coerce.number().int().min(1).max(20).default(5),
+  AUTH_MODE: z.enum(["oidc", "local", "development"]).default("oidc"),
   OIDC_ISSUER_URL: z.string().url().optional(),
   OIDC_AUDIENCE: z.string().min(1).default("reliacode-api"),
   CORS_ORIGINS: z.string().default("http://localhost:4173"),
+  PUBLIC_ORIGINS: z.string().optional(),
+  ADMIN_USERNAME: z.string().min(1).max(80).default("admin"),
+  ADMIN_PASSWORD_HASH: z.string().min(20).optional(),
+  ADMIN_TENANT_ID: z.string().uuid().default("00000000-0000-0000-0000-000000000001"),
+  ADMIN_ORGANIZATION_ID: z.string().uuid().default("00000000-0000-0000-0000-000000000002"),
+  SESSION_COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_-]+$/).default("reliacode_session"),
+  CSRF_COOKIE_NAME: z.string().regex(/^[A-Za-z0-9_-]+$/).default("reliacode_csrf"),
+  SESSION_COOKIE_SECURE: boolean.default(true),
+  ALLOW_INSECURE_HTTP: boolean.default(false),
+  SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
   TRUST_PROXY: boolean.default(false),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   OPEN_EPCIS_BASE_URL: z.string().url().optional(),
@@ -34,8 +45,14 @@ export function loadConfig(env = process.env) {
   const config = result.data;
   const databaseUrl = config.DATABASE_URL || (config.DATABASE_URL_FILE ? readFileSync(config.DATABASE_URL_FILE, "utf8").trim() : "");
   if (!databaseUrl) throw new Error("DATABASE_URL or DATABASE_URL_FILE is required");
-  if (config.NODE_ENV === "production" && config.AUTH_MODE !== "oidc") {
-    throw new Error("AUTH_MODE must be oidc in production");
+  if (config.NODE_ENV === "production" && !["oidc", "local"].includes(config.AUTH_MODE)) {
+    throw new Error("AUTH_MODE must be oidc or local in production");
+  }
+  if (config.NODE_ENV === "production" && config.AUTH_MODE === "local" && !config.ADMIN_PASSWORD_HASH) {
+    throw new Error("ADMIN_PASSWORD_HASH is required when AUTH_MODE=local");
+  }
+  if (config.NODE_ENV === "production" && config.AUTH_MODE === "local" && !config.SESSION_COOKIE_SECURE && !config.ALLOW_INSECURE_HTTP) {
+    throw new Error("SESSION_COOKIE_SECURE=false requires ALLOW_INSECURE_HTTP=true in production");
   }
   if (config.AUTH_MODE === "oidc" && !config.OIDC_ISSUER_URL) {
     throw new Error("OIDC_ISSUER_URL is required when AUTH_MODE=oidc");
@@ -43,6 +60,6 @@ export function loadConfig(env = process.env) {
   return {
     ...config,
     DATABASE_URL: databaseUrl,
-    corsOrigins: config.CORS_ORIGINS.split(",").map((value) => value.trim()).filter(Boolean)
+    corsOrigins: [...new Set((config.CORS_ORIGINS + "," + (config.PUBLIC_ORIGINS || "")).split(",").map((value) => value.trim()).filter(Boolean))]
   };
 }
