@@ -6,29 +6,51 @@ on:
 permissions:
   contents: read
 jobs:
-  test:
+  api:
+    name: API tests
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        app: [scan-api, scan-web]
-    defaults:
-      run:
-        working-directory: apps/${{ matrix.app }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: apps/${{ matrix.app }}/package-lock.json
+          cache-dependency-path: package-lock.json
       - run: npm ci
-      - if: matrix.app == 'scan-web'
-        run: npx playwright install --with-deps chromium
-      - if: matrix.app == 'scan-web'
+      - run: npm test --workspace @reliacode/scan-api
+      - run: npm audit --workspace @reliacode/scan-api --omit=dev --audit-level=high
+
+  web-browser:
+    name: Web browser tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Install Chromium for Playwright
+        run: npm exec --workspace reliacode-operations-mvp -- playwright install --with-deps chromium
+      - name: Start web server and run browser checks
+        shell: bash
         run: |
-          npm run dev > /tmp/reliacode-web.log 2>&1 &
-          for i in {1..20}; do curl -fsS http://localhost:4173/health/live && exit 0; sleep 1; done
-          cat /tmp/reliacode-web.log
-          exit 1
-      - run: npm audit --omit=dev --audit-level=high
-      - run: npm test
+          set -euo pipefail
+          npm run dev --workspace reliacode-operations-mvp > "$RUNNER_TEMP/reliacode-web.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4173/health/live >/dev/null; then break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then cat "$RUNNER_TEMP/reliacode-web.log"; exit 1; fi
+            sleep 1
+          done
+          curl --fail --silent http://127.0.0.1:4173/health/live >/dev/null
+          npm test --workspace reliacode-operations-mvp
+      - name: Upload web server log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-server-log
+          path: ${{ runner.temp }}/reliacode-web.log
+          if-no-files-found: ignore
