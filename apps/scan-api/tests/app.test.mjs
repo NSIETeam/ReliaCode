@@ -92,3 +92,28 @@ test("workspace schema enforces strict shape and serialized size", () => {
   assert.throws(() => parseWorkspace({...state,unexpected:true}), /Unrecognized key/);
   assert.throws(() => parseWorkspace({...state,accounts:[{id:ids.accountId,name:"x".repeat(4*1024*1024)}]}), (error) => error.code === "WORKSPACE_TOO_LARGE" && error.statusCode === 413);
 });
+
+test("CORS allows the configured origin and omits ACAO for untrusted origins", async (t) => {
+  const app = await buildApp({ config, db });
+  t.after(() => app.close());
+  const trusted = await app.inject({ method: "GET", url: "/health/live", headers: { origin: "http://localhost:4173" } });
+  assert.equal(trusted.statusCode, 200);
+  assert.equal(trusted.headers["access-control-allow-origin"], "http://localhost:4173");
+  assert.equal(trusted.headers["access-control-allow-credentials"], "true");
+  const untrusted = await app.inject({ method: "GET", url: "/health/live", headers: { origin: "https://attacker.example" } });
+  assert.equal(untrusted.statusCode, 200);
+  assert.equal(untrusted.headers["access-control-allow-origin"], undefined);
+  assert.equal(untrusted.headers["access-control-allow-credentials"], undefined);
+});
+
+test("CORS preflight rejects an untrusted origin without permission headers", async (t) => {
+  const app = await buildApp({ config, db });
+  t.after(() => app.close());
+  const response = await app.inject({ method: "OPTIONS", url: "/api/v1/me", headers: {
+    origin: "https://attacker.example",
+    "access-control-request-method": "POST",
+    "access-control-request-headers": "authorization,content-type"
+  } });
+  assert.equal(response.headers["access-control-allow-origin"], undefined);
+  assert.equal(response.headers["access-control-allow-credentials"], undefined);
+});
