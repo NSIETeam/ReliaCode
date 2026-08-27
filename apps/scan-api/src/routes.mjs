@@ -4,6 +4,7 @@ import { hashPassword, hashToken, newSessionToken, readCookie, verifyPassword, r
 import { eventCapability, nextObjectStatus, verificationForEvent } from "./domain.mjs";
 import { getIdempotentResponse, lockIdempotencyKey, requestHash, saveIdempotentResponse } from "./idempotency.mjs";
 import { codeBatchSchema, parseIdempotencyKey, riskDecisionSchema, traceEventSchema } from "./schemas.mjs";
+import { evaluateEntitlements, getPlan } from "./entitlements.mjs";
 
 function audit(client, request, action, entityType, entityId, beforeState, afterState) {
   const principal = request.principal;
@@ -108,6 +109,14 @@ function normalized(value) { return String(value).trim().toLocaleLowerCase('en-U
 const roleSchema = z.enum(ROLES);
 const emailSchema = z.string().trim().email().max(254).transform(normalized);
 async function inTransaction(db, work) { return typeof db.transaction === 'function' ? db.transaction(work) : work(db); }
+function requireOrganizationAdmin(principal) {
+  if (principal?.role !== 'BRAND_ADMIN') {
+    const error = new Error('Organization administrator permission is required');
+    error.statusCode = 403;
+    error.code = 'FORBIDDEN';
+    throw error;
+  }
+}
 function sessionUser(principal) {
   return {
     id:principal.id, name:principal.name, email:principal.email || null, role:principal.role,
@@ -387,6 +396,53 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
     return { authenticated:false };
   });
 
+  app.get('/api/v1/organization/entitlements', async (request, reply) => {
+    try {
+      const current = await db.query(
+        `SELECT COALESCE(e.plan, 'free') AS plan,
+                COALESCE(u.member_count, 0)::int AS member_count,
+                COALESCE(u.scan_count, 0)::int AS scan_count,
+                COALESCE(u.code_count, 0)::int AS code_count
+           FROM (SELECT $1::uuid AS tenant_id) t
+           LEFT JOIN tenant_entitlements e ON e.tenant_id=t.tenant_id
+           LEFT JOIN tenant_usage_monthly u ON u.tenant_id=t.tenant_id
+             AND u.usage_month=date_trunc('month', now())::date`,
+        [request.principal.tenantId]
+      );
+      const row = current.rows[0] || { plan: 'free', member_count: 0, scan_count: 0, code_count: 0 };
+      const verdict = evaluateEntitlements({
+        plan: row.plan,
+        usage: { members: Number(row.member_count), monthlyScans: Number(row.scan_count), monthlyCodes: Number(row.code_count) }
+      });
+      return { tenantId: request.principal.tenantId, ...verdict };
+    } catch (error) {
+      if (error?.code === '42P01') return reply.code(503).send({ code: 'ENTITLEMENTS_UNAVAILABLE', message: 'Entitlement storage is not ready' });
+      throw error;
+    }
+  });
+
+  app.patch('/api/v1/organization/entitlements', async (request, reply) => {
+    requireOrganizationAdmin(request.principal);
+    const body = z.object({ plan: z.enum(['free', 'team']) }).strict().parse(request.body);
+    const result = await inTransaction(db, async (client) => {
+      const before = await client.query('SELECT plan FROM tenant_entitlements WHERE tenant_id=$1 FOR UPDATE', [request.principal.tenantId]);
+      const previousPlan = before.rows[0]?.plan || 'free';
+      const saved = await client.query(
+        `INSERT INTO tenant_entitlements(tenant_id,plan,effective_at,updated_at)
+         VALUES($1,$2,now(),now())
+         ON CONFLICT(tenant_id) DO UPDATE SET plan=EXCLUDED.plan,effective_at=now(),updated_at=now()
+         RETURNING tenant_id,plan,effective_at,updated_at`,
+        [request.principal.tenantId, body.plan]
+      );
+      await client.query(
+        `INSERT INTO tenant_entitlement_audit(tenant_id,actor_id,action,plan_before,plan_after,request_id)
+         VALUES($1,$2,$3,$4,$5,$6)`,
+        [request.principal.tenantId, request.principal.id, previousPlan === body.plan ? 'PLAN_ASSIGNED' : 'PLAN_CHANGED', previousPlan, body.plan, request.id]
+      );
+      return saved.rows[0];
+    });
+    return { tenantId: result.tenant_id, plan: getPlan(result.plan), effectiveAt: result.effective_at, updatedAt: result.updated_at };
+  });
   app.get('/api/v1/workspace', async (request, reply) => {
     const result = request.principal.id==='local-admin'
       ? await db.query('SELECT workspace,version,updated_at FROM admin_workspaces WHERE id=1')
