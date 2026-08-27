@@ -160,12 +160,43 @@ function appendEvent({ action, code, result, actorId=account()?.id }) {
   state.events.unshift(event); return event;
 }
 
+const ONBOARDING_DISMISS_KEY = "reliacode-onboarding-dismissed-v1";
+let onboardingGuideOpen = false;
+function onboardingStorageKey() { return `${ONBOARDING_DISMISS_KEY}:${state.workspace?.id || "local"}`; }
+function onboardingIsDismissed() { try { return localStorage.getItem(onboardingStorageKey()) === "1"; } catch { return false; } }
+function dismissOnboarding() { onboardingGuideOpen=false; try { localStorage.setItem(onboardingStorageKey(), "1"); } catch {} const overlay=$("#onboarding"); if(overlay) overlay.hidden=true; renderOnboardingReopen(); }
+function reopenOnboarding() { onboardingGuideOpen=true; try { localStorage.removeItem(onboardingStorageKey()); } catch {} renderOnboarding(); }
+function onboardingSteps() {
+  const objects=Object.values(state.objects||{});
+  const hasScan=state.events.some((event)=>["VERIFY","PACKING","SHIPPING","RECEIVING_DISTRIBUTOR","RECEIVING_STORE","SELLING"].includes(event.action));
+  return [
+    { id:"workspace", title:"创建组织工作区", description:"已建立品牌、管理员和设备上下文。", done:Boolean(state.initialized&&state.workspace&&state.accounts.length), view:"dashboard", action:"查看工作区" },
+    { id:"product", title:"添加第一个产品环境", description:"维护产品名称和 SKU，作为可靠码的业务归属。", done:state.products.length>0, view:"codes", action:state.products.length?"查看产品":"添加产品" },
+    { id:"code", title:"生成接入代码", description:"为产品批量生成可导出的单品或包装码。", done:state.codeBatches.length>0, view:"codes", action:state.codeBatches.length?"查看代码":"生成代码" },
+    { id:"scan", title:"完成一次扫描", description:"验证一个可靠码，确认产品身份和追溯链路。", done:hasScan, view:"verify", action:hasScan?"查看验证":"开始验证" },
+    { id:"public", title:"准备公开验证", description:"每个可靠码都带有可分享的公开验证地址。", done:objects.some((item)=>Boolean(item.publicId)), view:"verify", action:"打开公开验证" }
+  ];
+}
+function renderOnboardingReopen() {
+  let button=$("#onboarding-reopen");
+  if(!state.initialized){ if(button)button.remove(); return; }
+  if(!button){button=document.createElement("button");button.id="onboarding-reopen";button.className="onboarding-reopen secondary";button.type="button";button.textContent="查看首次上手引导";document.body.append(button);}
+  button.onclick=reopenOnboarding;
+}
+
 function renderOnboarding() {
   let overlay=$("#onboarding");
   if (!overlay) { overlay=document.createElement("div"); overlay.id="onboarding"; overlay.className="onboarding"; document.body.append(overlay); }
-  overlay.hidden=state.initialized;
-  if (state.initialized) return;
+  if (state.initialized && !onboardingGuideOpen) { overlay.hidden=true; renderOnboardingReopen(); return; }
+  overlay.hidden=false;
   if(pendingDeepLink){overlay.innerHTML=`<section class="onboarding-card public-verification-card"><div class="onboarding-brand">${icon("logo")}<div><b>ReliaCode 可靠码</b><small>公开产品验证</small></div></div><div id="public-verification-result">${emptyState("尚未连接生产验证服务","公开验证服务尚未配置。")}</div><button id="enter-local-workspace" class="secondary" type="button">进入本地运营工作区</button></section>`;$("#enter-local-workspace").onclick=()=>{pendingDeepLink=null;publicLoadToken+=1;history.replaceState({},"",location.pathname);renderOnboarding();};if(!publicLoadStarted&&sameOriginApiAvailable){publicLoadStarted=true;const token=++publicLoadToken;loadPublicVerification(pendingDeepLink,$("#public-verification-result"),token);}return;}
+  if (state.initialized) {
+    const steps=onboardingSteps(), completed=steps.filter((step)=>step.done).length;
+    overlay.innerHTML=`<section class="onboarding-card onboarding-guide" role="dialog" aria-modal="true" aria-labelledby="onboarding-title"><button id="onboarding-close" class="onboarding-close" type="button" aria-label="关闭首次上手引导">${icon("close")}</button><div class="onboarding-brand">${icon("logo")}<div><b>ReliaCode 可靠码</b><small>五步完成第一次有效追溯</small></div></div><div class="onboarding-guide-head"><div><h1 id="onboarding-title">把第一个产品跑通</h1><p>按顺序完成下面步骤即可验证从组织设置到公开验证的完整链路。</p></div><span class="onboarding-progress">${completed}/5</span></div><div class="onboarding-steps">${steps.map((step,index)=>`<article class="onboarding-step ${step.done?"is-done":""}"><span class="onboarding-step-number">${step.done?icon("check"):index+1}</span><div><strong>${escapeHtml(step.title)}</strong><p>${escapeHtml(step.description)}</p><button class="secondary onboarding-action" type="button" data-onboarding-go="${step.view}">${escapeHtml(step.action)}</button></div></article>`).join("")}</div><button id="onboarding-dismiss" class="link-button onboarding-dismiss" type="button">稍后再看</button></section>`;
+    $("#onboarding-close").onclick=dismissOnboarding; $("#onboarding-dismiss").onclick=dismissOnboarding;
+    overlay.querySelectorAll("[data-onboarding-go]").forEach((button)=>button.onclick=()=>{dismissOnboarding();go(button.dataset.onboardingGo);});
+    return;
+  }
   const hosted = persistentWorkspace;
   if(hosted&&sessionUser&&currentRole()!=="BRAND_ADMIN"){
     overlay.innerHTML=`<section class="onboarding-card"><div class="onboarding-brand">${icon("logo")}<div><b>ReliaCode 可靠码</b><small>组织工作区</small></div></div><h1>等待组织工作区</h1><p>当前账号已加入“${escapeHtml(sessionUser.organizationName||"组织")}”，但组织管理员尚未初始化共享工作区。请联系管理员完成设置。</p><button id="auth-logout-empty" class="secondary" type="button">退出登录</button></section>`;
