@@ -19,7 +19,9 @@ services:
 
   api:
     image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
-    environment: *api_environment
+    environment:
+      <<: *api_environment
+      DB_POOL_MAX: ${DB_POOL_MAX:-8}
     secrets: [database_url]
     ports: ["4180:4180"]
     depends_on:
@@ -35,7 +37,9 @@ services:
   outbox-worker:
     image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
     command: ["src/outbox-worker.mjs"]
-    environment: *api_environment
+    environment:
+      <<: *api_environment
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}
     secrets: [database_url]
     depends_on:
       migrate: { condition: service_completed_successfully }
