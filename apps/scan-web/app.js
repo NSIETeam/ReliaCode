@@ -1,4 +1,5 @@
 const STORAGE_KEY = "reliacode-workspace-v1";
+const PENDING_STATE_KEY = "reliacode-workspace-pending-v1";
 localStorage.removeItem("reliacode-mvp");
 const EMPTY_STATE = Object.freeze({
   schemaVersion: 1, initialized: false, workspace: null, accounts: [], currentAccountId: null,
@@ -75,6 +76,9 @@ let saveConflict = null;
 let saveRevision = 0;
 let saveRetryAttempt = 0;
 let saveOnline = navigator.onLine !== false;
+let saveNextRetryAt = 0;
+let persistenceQueue = null;
+let persistenceTick = null;
 const apiUrl = (path) => apiBaseUrl + path;
 async function serverRequest(path, options={}) {
   const response = await fetch(apiUrl(path), { credentials:"include", ...options, headers:{ Accept:"application/json", ...(options.body?{"Content-Type":"application/json"}:{}), ...(options.headers||{}) } });
@@ -92,6 +96,13 @@ function parseWorkspaceResponse(body,options={}){if(!body||!Number.isInteger(Num
 function exportWorkspaceSnapshot(value=state){downloadFile('reliacode-workspace-local-'+new Date().toISOString().slice(0,10)+'.json',JSON.stringify(value,null,2),'application/json');}
 function showPersistenceStatus(message,actions=[]){let node=$('#persistence-status');if(!node){node=document.createElement('div');node.id='persistence-status';Object.assign(node.style,{position:'fixed',left:'50%',bottom:'20px',transform:'translateX(-50%)',zIndex:'1000',maxWidth:'min(720px,calc(100vw - 32px))',padding:'14px 16px',borderRadius:'12px',background:'#241b12',color:'#fff',boxShadow:'0 10px 30px #0005',fontSize:'14px'});document.body.append(node);}node.innerHTML='';const text=document.createElement('span');text.textContent=message;node.append(text);for(const action of actions){const button=document.createElement('button');button.type='button';button.textContent=action.label;button.onclick=action.onClick;Object.assign(button.style,{marginLeft:'10px',padding:'6px 10px',borderRadius:'7px',border:'1px solid #ffffff66',background:'#ffffff18',color:'inherit',cursor:'pointer'});node.append(button);}node.hidden=false;}
 function clearPersistenceStatus(){const node=$('#persistence-status');if(node)node.hidden=true;}
+function pendingState(){try{const value=JSON.parse(localStorage.getItem(PENDING_STATE_KEY));return workspacePayloadValid(value)?value:null;}catch{return null;}}
+function preservePendingState(){if(!persistentWorkspace||!saveDirty)return;try{localStorage.setItem(PENDING_STATE_KEY,JSON.stringify(state));}catch{}}
+function clearPendingState(){try{localStorage.removeItem(PENDING_STATE_KEY);}catch{}}
+function clearSavedPendingState(){if(saveDirty||saveConflict||saveInFlight)return toast("仍有未同步数据，保存成功后才能清理");clearPendingState();if(persistenceQueue)persistenceQueue.clear();updatePersistenceStatus();toast("已清理本地同步副本，服务器数据不受影响");}
+function retryPersistence(){saveConflict=null;if(persistenceQueue){persistenceQueue.retry();}else{saveRetryAttempt=0;saveNextRetryAt=0;persistNow();}updatePersistenceStatus();}
+function updatePersistenceStatus(){let node=$("#persistence-status");if(!persistentWorkspace||(!saveDirty&&!saveConflict&&!saveInFlight)){if(node)node.hidden=true;return;}if(!node){node=document.createElement("div");node.id="persistence-status";node.className="persistence-banner";document.body.append(node);}const blocked=Boolean(saveConflict),offline=!saveOnline;const wait=saveNextRetryAt?Math.max(0,Math.ceil((saveNextRetryAt-Date.now())/1000)):0;node.hidden=false;node.innerHTML=`<span class="persistence-message">${blocked?"工作区存在冲突，未同步数据已保留。":offline?"当前离线，未同步数据已保留。":saveInFlight?"正在同步工作区…":wait?`保存失败，将在 ${wait} 秒后重试。`:"有未同步的工作区变更。"}</span><span class="persistence-actions"><button type="button" data-persistence-retry>${blocked?"重试（先刷新服务器）":"立即重试"}</button><button type="button" data-persistence-export>导出副本</button></span>`;node.querySelector("[data-persistence-retry]").onclick=retryPersistence;node.querySelector("[data-persistence-export]").onclick=()=>exportWorkspaceSnapshot(pendingState()||state);}
+function startPersistenceQueue(){if(!persistentWorkspace||persistenceQueue)return;import("./persistence.mjs").then(({createPersistenceQueue,createLocalStorageAdapter})=>{const adapter=createLocalStorageAdapter({key:"reliacode-persistence-queue-v1"});persistenceQueue=createPersistenceQueue({adapter,delay:500,maxDelay:30000,jitter:.2,online:saveOnline,write:()=>persistNow(),onConflict:()=>{saveConflict={status:409};updatePersistenceStatus();},onError:()=>updatePersistenceStatus()});if(persistenceQueue.status.dirty){saveDirty=true;const pending=pendingState();if(pending){state=pending;}}updatePersistenceStatus();persistenceTick=setInterval(updatePersistenceStatus,500);}).catch(()=>updatePersistenceStatus());}
 async function persistNow() {
   if (!persistentWorkspace || !serverReady || saveInFlight || saveConflict || !saveDirty) return false;
   clearTimeout(saveTimer); saveTimer=null;
@@ -102,28 +113,33 @@ async function persistNow() {
     parseWorkspaceResponse(result);
     serverVersion = Number(result.version);
     saveRetryAttempt=0;
-    if (saveRevision===revision) saveDirty=false;
+    if (saveRevision===revision) { saveDirty=false; clearPendingState(); }
+    updatePersistenceStatus();
     return true;
   } catch (error) {
     saveDirty=true;
     if (error.status === 409) { saveConflict={status:409}; toast("Workspace changed in another session; reload and retry"); }
-    else { saveRetryAttempt=Math.min(saveRetryAttempt+1,10); toast("Server save failed; check network"); schedulePersistRetry(); }
+    else { saveRetryAttempt=Math.min(saveRetryAttempt+1,10); saveNextRetryAt=Date.now()+Math.min(30000,500*(2**Math.min(saveRetryAttempt,6))); toast("Server save failed; check network"); schedulePersistRetry(); }
+    updatePersistenceStatus();
     return false;
-  } finally { saveInFlight=false; schedulePersistRetry(); }
+  } finally { saveInFlight=false; updatePersistenceStatus(); schedulePersistRetry(); }
 }
 function schedulePersistRetry() {
+  if (persistenceQueue) return;
   if (!persistentWorkspace || !serverReady || !saveOnline || saveInFlight || saveConflict || !saveDirty) return;
   clearTimeout(saveTimer);
   const base=Math.min(30000,500*(2**Math.min(saveRetryAttempt,6)));
   const jitter=Math.round(base*(Math.random()*0.4-0.2));
+  saveNextRetryAt=Date.now()+Math.max(250,base+jitter);
   saveTimer=setTimeout(persistNow,Math.max(250,base+jitter));
 }
-window.addEventListener("offline",()=>{saveOnline=false;clearTimeout(saveTimer);saveTimer=null;});
-window.addEventListener("online",()=>{saveOnline=true;saveRetryAttempt=0;schedulePersistRetry();});
+window.addEventListener("offline",()=>{saveOnline=false;clearTimeout(saveTimer);saveTimer=null;saveNextRetryAt=0;if(persistenceQueue)persistenceQueue.setOnline(false);updatePersistenceStatus();});
+window.addEventListener("online",()=>{saveOnline=true;saveRetryAttempt=0;saveNextRetryAt=0;if(persistenceQueue)persistenceQueue.setOnline(true);schedulePersistRetry();updatePersistenceStatus();});
 const save = () => {
   if (!persistentWorkspace) { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); return; }
-  saveDirty=true; saveRevision+=1; saveRetryAttempt=0;
-  clearTimeout(saveTimer); saveTimer=setTimeout(persistNow, 500);
+  saveDirty=true; saveRevision+=1; saveRetryAttempt=0; preservePendingState();
+  if(persistenceQueue){persistenceQueue.markDirty();updatePersistenceStatus();return;}
+  clearTimeout(saveTimer); saveTimer=setTimeout(persistNow, 500); updatePersistenceStatus();
 };
 const account = () => state.accounts.find((item) => item.id===state.currentAccountId) || state.accounts[0] || null;
 const currentRole = () => String(sessionUser?.role || account()?.roleCode || (account()?.kind === "FIELD" ? "FACTORY_OPERATOR" : "BRAND_ADMIN")).toUpperCase();
@@ -360,9 +376,9 @@ document.addEventListener("click",(event)=>{const target=event.target.closest("[
 document.querySelectorAll(".nav-link").forEach((button)=>button.onclick=()=>go(button.dataset.view));
 $("#agent-toggle").onclick=openAgent;$("#agent-close").onclick=closeAgent;$("#agent-backdrop").onclick=closeAgent;$("#agent-drawer").inert=true;$("#agent-form").onsubmit=(event)=>{event.preventDefault();executeAgent($("#agent-command").value);$("#agent-command").value="";};$("#reset").onclick=clearWorkspace;$("#camera-close").innerHTML=icon("close");$("#camera-close").onclick=closeCamera;
 document.addEventListener("keydown",(event)=>{if(event.key==="Escape"&&!$("#camera-modal").hidden)closeCamera();else if(event.key==="Escape"&&$("#agent-drawer").classList.contains("open"))closeAgent();});
-async function loadServerWorkspace({allowMigration=false}={}){try{const result=parseWorkspaceResponse(await serverRequest('/api/v1/workspace'),{allowUninitialized:true});state=result.workspace;serverVersion=result.version;}catch(error){if(error.status!==404)throw error;if(allowMigration&&state?.initialized&&confirm('Migrate local workspace to server?')){saveDirty=true;saveRevision+=1;saveRetryAttempt=0;const migrated=await persistNow();if(!migrated||saveDirty)return;localStorage.removeItem(STORAGE_KEY);location.reload();return;}state=cloneEmpty();serverVersion=0;}}
+async function loadServerWorkspace({allowMigration=false}={}){try{const result=parseWorkspaceResponse(await serverRequest('/api/v1/workspace'),{allowUninitialized:true});const pending=persistenceQueue?.status?.dirty?pendingState():null;state=pending||result.workspace;serverVersion=result.version;}catch(error){if(error.status!==404)throw error;if(allowMigration&&state?.initialized&&confirm('Migrate local workspace to server?')){saveDirty=true;saveRevision+=1;saveRetryAttempt=0;const migrated=await persistNow();if(!migrated||saveDirty)return;localStorage.removeItem(STORAGE_KEY);location.reload();return;}state=cloneEmpty();serverVersion=0;}}
 const localClearWorkspace=clearWorkspace;clearWorkspace=async function(){if(!persistentWorkspace)return localClearWorkspace();if(!confirm('Reset the server workspace? Export a local backup first.'))return;try{const result=await serverRequest('/api/v1/workspace/reset',{method:'POST',headers:{'X-CSRF-Token':csrfToken}});if(result.workspace){const parsed=parseWorkspaceResponse(result,{allowUninitialized:true});state=parsed.workspace;serverVersion=parsed.version;}localStorage.removeItem(STORAGE_KEY);location.reload();}catch(error){showPersistenceStatus(error.status===404?'Server reset is not available; nothing was cleared.':'Server reset failed; nothing was cleared.');}};$('#reset').onclick=clearWorkspace;
-const originalToast=toast;toast=(message)=>{if(String(message).includes('Workspace changed')){saveDirty=true;saveConflict={status:409};showPersistenceStatus('Workspace conflict: local changes are not saved.',[{label:'Reload server',onClick:async()=>{try{const result=parseWorkspaceResponse(await serverRequest('/api/v1/workspace'),{allowUninitialized:true});state=result.workspace;serverVersion=result.version;saveDirty=false;saveConflict=null;clearPersistenceStatus();renderAll();}catch(error){originalToast(error.message);}}},{label:'Export local copy',onClick:()=>exportWorkspaceSnapshot()}]);return;}originalToast(message);};
+const originalToast=toast;toast=(message)=>{if(String(message).includes('Workspace changed')){saveDirty=true;saveConflict={status:409};showPersistenceStatus('Workspace conflict: local changes are not saved.',[{label:'Reload server',onClick:async()=>{if(saveDirty&&!confirm('Discard unsynced local changes? Export first if needed.'))return;try{const result=parseWorkspaceResponse(await serverRequest('/api/v1/workspace'),{allowUninitialized:true});const pending=persistenceQueue?.status?.dirty?pendingState():null;state=pending||result.workspace;serverVersion=result.version;saveDirty=false;saveConflict=null;clearPersistenceStatus();renderAll();}catch(error){originalToast(error.message);}}},{label:'Export local copy',onClick:()=>exportWorkspaceSnapshot()}]);return;}originalToast(message);};
 async function loadPublicVerification(publicId,target,token){
   const out=target||$('#public-verification-result');
   const isCurrent=()=>Boolean(out&&out.isConnected&&out===$('#public-verification-result')&&(token===undefined||token===publicLoadToken));
@@ -401,4 +417,5 @@ function showLogin() {
   };
   renderAuth('login');
 }
+startPersistenceQueue();
 bootstrap();
