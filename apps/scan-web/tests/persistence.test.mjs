@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createPersistenceQueue, isWorkspaceState, parseWorkspaceResponse } from "../persistence.mjs";
+import { createPersistenceQueue, createLocalStorageAdapter, isWorkspaceState, parseWorkspaceResponse } from "../persistence.mjs";
 
 const workspace = {
   schemaVersion: 1, initialized: true, workspace: { id: "workspace", brandName: "Acme", createdAt: "now" },
@@ -53,4 +53,21 @@ test("workspace payload validation rejects malformed server responses", () => {
   assert.equal(isWorkspaceState(workspace), true);
   assert.throws(() => parseWorkspaceResponse({ version: 1, workspace: { initialized: true } }), /工作区数据无效/);
   assert.equal(parseWorkspaceResponse({ version: "2", workspace }).version, 2);
+});
+
+test("local storage adapter safely restores and clears blocked queue state", async () => {
+  const values = new Map();
+  const storage = { getItem: (key) => values.get(key) ?? null, setItem: (key, value) => values.set(key, value), removeItem: (key) => values.delete(key) };
+  const adapter = createLocalStorageAdapter({ storage, key: "queue" });
+  let writes = 0;
+  const first = createPersistenceQueue({ adapter, delay: 50, jitter: 0, write: async () => { writes += 1; const error = new Error("conflict"); error.status = 409; throw error; } });
+  first.markDirty(); await new Promise((resolve) => setTimeout(resolve, 80));
+  assert.equal(first.status.blocked, true);
+  const restored = createPersistenceQueue({ adapter, delay: 50, jitter: 0, write: async () => { writes += 1; } });
+  assert.equal(restored.status.blocked, true);
+  await restored.retry();
+  assert.equal(restored.status.dirty, false);
+  assert.equal(writes, 2);
+  restored.markDirty(); restored.clear();
+  assert.equal(adapter.load(), null);
 });
