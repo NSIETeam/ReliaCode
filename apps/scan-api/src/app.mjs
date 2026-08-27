@@ -37,9 +37,11 @@ export async function buildApp({ config, db }) {
   if (config.NODE_ENV === "production" && config.AUTH_MODE === "local" && !config.SESSION_COOKIE_SECURE) app.log.warn("INSECURE HTTP session cookies are enabled; use HTTPS as soon as possible");
   app.decorateRequest("principal", null);
   app.addHook("onRequest", async (request, reply) => {
-    const invitationAccept = request.url.split("?",1)[0] === "/api/auth/invitations/accept";
+    const pathname = request.url.split("?",1)[0];
+    const invitationAccept = pathname === "/api/auth/invitations/accept";
+    const passwordReset = pathname === "/api/auth/password-reset/request" || pathname === "/api/auth/password-reset/confirm";
     const hasAuthCredentials = Boolean(request.headers.authorization || request.headers.cookie);
-    if (request.url === "/health/live" || request.url === "/health/ready" || request.url.startsWith("/api/public/") || request.url === "/api/auth/login" || request.url === "/api/auth/register" || (invitationAccept && !hasAuthCredentials)) return;
+    if (request.url === "/health/live" || request.url === "/health/ready" || request.url.startsWith("/api/public/") || request.url === "/api/auth/login" || request.url === "/api/auth/register" || passwordReset || (invitationAccept && !hasAuthCredentials)) return;
     try { request.principal = await authenticate(request); } catch (error) {
       request.log.warn({ error: error.message }, "authentication failed");
     }
