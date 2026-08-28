@@ -28,3 +28,10 @@ test("packing and unpacking map to EPCIS AggregationEvent ADD and DELETE",()=>{
     assert.equal(event.type,"AggregationEvent");assert.equal(event.action,action);assert.deepEqual(event.childEPCs,["https://id.reliacode.cn/8004/CHILD-1"]);assert.equal(event.parentID,"https://id.reliacode.cn/8004/PARENT-1");assert.equal(event.epcList,undefined);
   }
 });
+
+test("atomic repacking emits ordered DELETE and ADD aggregation events",()=>{
+  const document=toEpcisDocument({event:{id:"00000000-0000-4000-8000-000000000004",event_type:"REPACKING",event_time:"2026-08-28T10:00:00+08:00",read_point:"https://id.gs1.org/414/6901234567892",organization_id:"org-1"},object:{code:"CHILD-1"},aggregations:[{parent:{code:"OLD-CASE"},child:{code:"CHILD-1"},action:"DELETE"},{parent:{code:"NEW-CASE"},child:{code:"CHILD-1"},action:"ADD"}]},{baseUrl:"https://id.reliacode.cn"});
+  assert.deepEqual(document.epcisBody.eventList.map(event=>event.action),["DELETE","ADD"]);
+  assert.deepEqual(document.epcisBody.eventList.map(event=>event.parentID),["https://id.reliacode.cn/8004/OLD-CASE","https://id.reliacode.cn/8004/NEW-CASE"]);
+  assert.equal(new Set(document.epcisBody.eventList.map(event=>event.eventID)).size,2);
+});

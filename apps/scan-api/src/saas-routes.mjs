@@ -9,7 +9,7 @@ import { isValidGln,isValidGs1X,isValidGtin,ssccCapacity } from "./gs1.mjs";
 const email = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
 const reason = z.string().trim().min(3).max(500);
 const uuid = z.string().uuid();
-const deviceEventType=z.enum(["PACKING","UNPACKING","SHIPPING","RECEIVING_DISTRIBUTOR","RECEIVING_STORE","RETURNING","SELLING","DESTROYING"]);
+const deviceEventType=z.enum(["PACKING","UNPACKING","REPACKING","SHIPPING","RECEIVING_DISTRIBUTOR","RECEIVING_STORE","RETURNING","SELLING","DESTROYING"]);
 const pageQuery = z.object({ cursor:z.string().optional(), limit:z.coerce.number().int().min(1).max(200).default(50) });
 
 function cursorEncode(row) { return Buffer.from(JSON.stringify([row.created_at, row.id])).toString("base64url"); }

@@ -629,7 +629,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       const object = found.rows[0];
       let businessDocument = null;
       if (body.documentId) {
-        const expectedType={PACKING:"PACKING_ORDER",UNPACKING:"PACKING_ORDER",SHIPPING:"SHIPMENT",RECEIVING_DISTRIBUTOR:"RECEIPT",RECEIVING_STORE:"RECEIPT",RETURNING:"RETURN",SELLING:"SALE",DESTROYING:"DESTRUCTION"}[body.eventType];
+        const expectedType={PACKING:"PACKING_ORDER",UNPACKING:"PACKING_ORDER",REPACKING:"PACKING_ORDER",SHIPPING:"SHIPMENT",RECEIVING_DISTRIBUTOR:"RECEIPT",RECEIVING_STORE:"RECEIPT",RETURNING:"RETURN",SELLING:"SALE",DESTROYING:"DESTRUCTION"}[body.eventType];
         const documentResult=await client.query("SELECT * FROM business_documents WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[request.principal.tenantId,body.documentId]);
         if(!documentResult.rowCount){const error=new Error("Business document not found");error.statusCode=404;error.code="DOCUMENT_NOT_FOUND";throw error;}
         businessDocument=documentResult.rows[0];
@@ -657,7 +657,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       const stateApplied = body.eventType !== "VERIFY" && verification.status === "VERIFIED";
       const effectiveStatus = stateApplied ? nextStatus : object.status;
       const affectedObjects=[{...object,depth:0,resulting_status:effectiveStatus}];
-      if(stateApplied&&!["PACKING","UNPACKING"].includes(body.eventType)&&["CASE","PALLET"].includes(object.level)){
+      if(stateApplied&&!["PACKING","UNPACKING","REPACKING"].includes(body.eventType)&&["CASE","PALLET"].includes(object.level)){
         const descendants=await client.query(`WITH RECURSIVE tree AS (
           SELECT id,parent_id,0 depth,ARRAY[id] path FROM serialized_objects WHERE tenant_id=$1 AND id=$2
           UNION ALL
@@ -668,7 +668,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
           WHERE tree.depth>0 ORDER BY tree.depth,so.id FOR UPDATE OF so`,[request.principal.tenantId,object.id]);
         for(const descendant of descendants.rows)affectedObjects.push({...descendant,resulting_status:nextObjectStatus(body.eventType,descendant.level,descendant.status)});
       }
-      let parentObject=null;
+      let parentObject=null,previousParentObject=null;
       if(body.eventType==="PACKING"){
         const parent=await client.query("SELECT * FROM serialized_objects WHERE tenant_id=$1 AND code=$2 FOR UPDATE",[request.principal.tenantId,body.parentObjectCode]);
         if(!parent.rowCount){const error=new Error("Parent object not found");error.statusCode=404;error.code="OBJECT_NOT_FOUND";throw error;}
@@ -682,34 +682,47 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
         const parent=await client.query("SELECT * FROM serialized_objects WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[request.principal.tenantId,object.parent_id]);
         if(!parent.rowCount){const error=new Error("Packaging parent not found");error.statusCode=409;error.code="PACKAGING_RELATIONSHIP_INVALID";throw error;}parentObject=parent.rows[0];
       }
+      if(body.eventType==="REPACKING"){
+        if(!object.parent_id){const error=new Error("Object is not currently packed");error.statusCode=409;error.code="OBJECT_NOT_PACKED";throw error;}
+        const parents=await client.query("SELECT * FROM serialized_objects WHERE tenant_id=$1 AND (id=$2 OR code=$3) ORDER BY id FOR UPDATE",[request.principal.tenantId,object.parent_id,body.parentObjectCode]);
+        previousParentObject=parents.rows.find(row=>row.id===object.parent_id)||null;parentObject=parents.rows.find(row=>row.code===body.parentObjectCode)||null;
+        if(!previousParentObject){const error=new Error("Current packaging parent not found");error.statusCode=409;error.code="PACKAGING_RELATIONSHIP_INVALID";throw error;}
+        if(!parentObject){const error=new Error("New packaging parent not found");error.statusCode=404;error.code="OBJECT_NOT_FOUND";throw error;}
+        const ranks={ITEM:1,CASE:2,PALLET:3};
+        if(parentObject.id===previousParentObject.id){const error=new Error("New packaging parent must differ from the current parent");error.statusCode=409;error.code="SAME_PACKAGING_PARENT";throw error;}
+        if(ranks[parentObject.level]<=ranks[object.level]||parentObject.status==="DESTROYED"){const error=new Error("Invalid new packaging parent");error.statusCode=409;error.code="INVALID_PACKAGING_PARENT";throw error;}
+        if(parentObject.current_organization_id&&parentObject.current_organization_id!==request.principal.organizationId){const error=new Error("Packaging parent is held by another organization");error.statusCode=404;error.code="OBJECT_NOT_FOUND";throw error;}
+      }
       if(parentObject&&businessDocument){
-        const parentLine=await client.query("SELECT expected FROM business_document_objects WHERE tenant_id=$1 AND document_id=$2 AND object_id=$3",[request.principal.tenantId,businessDocument.id,parentObject.id]);
-        if(!parentLine.rowCount||!parentLine.rows[0].expected){const error=new Error("The packaging parent is not expected on this business document");error.statusCode=409;error.code="PARENT_NOT_ON_DOCUMENT";throw error;}
+        for(const requiredParent of [previousParentObject,parentObject].filter((value,index,array)=>value&&array.findIndex(item=>item?.id===value.id)===index)){
+          const parentLine=await client.query("SELECT expected FROM business_document_objects WHERE tenant_id=$1 AND document_id=$2 AND object_id=$3",[request.principal.tenantId,businessDocument.id,requiredParent.id]);
+          if(!parentLine.rowCount||!parentLine.rows[0].expected){const error=new Error("Every packaging parent must be expected on this business document");error.statusCode=409;error.code="PARENT_NOT_ON_DOCUMENT";throw error;}
+        }
       }
       const event = await client.query(
         `INSERT INTO trace_events(tenant_id,event_type,object_id,shipment_id,business_document_id,actor_id,actor_role,organization_id,device_id,location_id,event_time,read_point,verification_status,metadata,idempotency_key)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
         [request.principal.tenantId,body.eventType,object.id,body.shipmentId||null,body.documentId||null,request.principal.id,request.principal.role,request.principal.organizationId,device.deviceId,device.locationId,body.eventTime,device.readPoint,verification.status,body.metadata,key]
       );
-      const snapshots=affectedObjects.map(item=>({objectId:item.id,depth:item.depth,parentObjectId:item.parent_id||null,previousStatus:item.status,resultingStatus:item.resulting_status,objectSnapshot:{code:item.code,level:item.level,lot:item.lot||null,parentObjectId:item.parent_id||null,currentOrganizationId:item.current_organization_id||null,productId:item.product_id}}));
-      await client.query(`INSERT INTO trace_event_object_snapshots(tenant_id,trace_event_id,object_id,depth,parent_object_id,previous_status,resulting_status,object_snapshot)
-        SELECT $1,$2,x.object_id,x.depth,x.parent_object_id,x.previous_status,x.resulting_status,x.object_snapshot
-        FROM jsonb_to_recordset($3::jsonb) AS x(object_id uuid,depth integer,parent_object_id uuid,previous_status text,resulting_status text,object_snapshot jsonb)`,[request.principal.tenantId,event.rows[0].id,JSON.stringify(snapshots.map(item=>({object_id:item.objectId,depth:item.depth,parent_object_id:item.parentObjectId,previous_status:item.previousStatus,resulting_status:item.resultingStatus,object_snapshot:item.objectSnapshot})))]);
+      const snapshots=affectedObjects.map(item=>({objectId:item.id,depth:item.depth,parentObjectId:item.parent_id||null,resultingParentObjectId:body.eventType==="PACKING"||body.eventType==="REPACKING"?parentObject.id:body.eventType==="UNPACKING"?null:item.parent_id||null,previousStatus:item.status,resultingStatus:item.resulting_status,objectSnapshot:{code:item.code,level:item.level,lot:item.lot||null,parentObjectId:item.parent_id||null,currentOrganizationId:item.current_organization_id||null,productId:item.product_id}}));
+      await client.query(`INSERT INTO trace_event_object_snapshots(tenant_id,trace_event_id,object_id,depth,parent_object_id,resulting_parent_object_id,previous_status,resulting_status,object_snapshot)
+        SELECT $1,$2,x.object_id,x.depth,x.parent_object_id,x.resulting_parent_object_id,x.previous_status,x.resulting_status,x.object_snapshot
+        FROM jsonb_to_recordset($3::jsonb) AS x(object_id uuid,depth integer,parent_object_id uuid,resulting_parent_object_id uuid,previous_status text,resulting_status text,object_snapshot jsonb)`,[request.principal.tenantId,event.rows[0].id,JSON.stringify(snapshots.map(item=>({object_id:item.objectId,depth:item.depth,parent_object_id:item.parentObjectId,resulting_parent_object_id:item.resultingParentObjectId,previous_status:item.previousStatus,resulting_status:item.resultingStatus,object_snapshot:item.objectSnapshot})))]);
       await client.query(
         `INSERT INTO event_outbox(tenant_id,aggregate_type,aggregate_id,event_type,payload)
          VALUES($1,'SERIALIZED_OBJECT',$2,'TRACE_EVENT_CAPTURED',$3)`,
-        [request.principal.tenantId,object.id,{ event:event.rows[0], object:{ id:object.id, code:object.code, level:object.level, productId:object.product_id },...(parentObject?{aggregation:{parent:{id:parentObject.id,code:parentObject.code,level:parentObject.level},child:{id:object.id,code:object.code,level:object.level},action:body.eventType==="PACKING"?"ADD":"DELETE"}}:{}) }]
+        [request.principal.tenantId,object.id,{ event:event.rows[0], object:{ id:object.id, code:object.code, level:object.level, productId:object.product_id },...(parentObject?{aggregations:body.eventType==="REPACKING"?[{parent:{id:previousParentObject.id,code:previousParentObject.code,level:previousParentObject.level},child:{id:object.id,code:object.code,level:object.level},action:"DELETE"},{parent:{id:parentObject.id,code:parentObject.code,level:parentObject.level},child:{id:object.id,code:object.code,level:object.level},action:"ADD"}]:[{parent:{id:parentObject.id,code:parentObject.code,level:parentObject.level},child:{id:object.id,code:object.code,level:object.level},action:body.eventType==="PACKING"?"ADD":"DELETE"}]}:{}) }]
       );
       if (stateApplied) {
-        const parentId=body.eventType==="PACKING"?parentObject.id:body.eventType==="UNPACKING"?null:object.parent_id;
+        const parentId=["PACKING","REPACKING"].includes(body.eventType)?parentObject.id:body.eventType==="UNPACKING"?null:object.parent_id;
         await client.query("UPDATE serialized_objects SET status=$1,current_organization_id=$2,parent_id=$3 WHERE tenant_id=$4 AND id=$5", [nextStatus, request.principal.organizationId,parentId,request.principal.tenantId,object.id]);
         if(affectedObjects.length>1)await client.query(`UPDATE serialized_objects so SET status=x.resulting_status,current_organization_id=$2
           FROM jsonb_to_recordset($1::jsonb) AS x(object_id uuid,resulting_status text)
           WHERE so.tenant_id=$3 AND so.id=x.object_id`,[JSON.stringify(affectedObjects.slice(1).map(item=>({object_id:item.id,resulting_status:item.resulting_status}))),request.principal.organizationId,request.principal.tenantId]);
-        if(body.eventType==="PACKING"||body.eventType==="UNPACKING"){
-          const relationshipParent=parentObject.id;
-          await client.query(`INSERT INTO package_relationship_events(tenant_id,parent_object_id,child_object_id,action,business_document_id,trace_event_id,actor_id,occurred_at)
-           VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[request.principal.tenantId,relationshipParent,object.id,body.eventType==="PACKING"?"ADD":"DELETE",body.documentId,event.rows[0].id,request.principal.id,body.eventTime]);
+        if(["PACKING","UNPACKING","REPACKING"].includes(body.eventType)){
+          const changes=body.eventType==="REPACKING"?[[previousParentObject.id,"DELETE"],[parentObject.id,"ADD"]]:[[parentObject.id,body.eventType==="PACKING"?"ADD":"DELETE"]];
+          for(const [relationshipParent,action] of changes)await client.query(`INSERT INTO package_relationship_events(tenant_id,parent_object_id,child_object_id,action,business_document_id,trace_event_id,actor_id,occurred_at)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[request.principal.tenantId,relationshipParent,object.id,action,body.documentId,event.rows[0].id,request.principal.id,body.eventTime]);
         }
       }
       if(body.eventType!=="VERIFY")await enqueueWebhookDeliveries(client,request.principal.tenantId,body.eventType,{eventId:event.rows[0].id,eventType:body.eventType,eventTime:body.eventTime,object:{code:object.code,level:object.level,status:effectiveStatus},verificationStatus:verification.status});

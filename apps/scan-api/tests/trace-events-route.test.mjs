@@ -8,23 +8,24 @@ const principal=JSON.stringify({sub:ids.user,tenant_id:ids.tenant,organization_i
 const deviceToken="route-test-device-token-0123456789abcdef";
 const config=loadConfig({NODE_ENV:"test",DATABASE_URL:"postgres://unused",AUTH_MODE:"development",CORS_ORIGINS:"http://localhost:4173",LOG_LEVEL:"silent",REQUIRE_DEVICE_AUTHORIZATION:"true"});
 
-function database({documentObject=true,rootLevel="ITEM",descendants=[]}={}){
+function database({documentObject=true,rootLevel="ITEM",rootParentId=null,descendants=[],documentType="SHIPMENT",eventType="SHIPPING",parentRows=[]}={}){
   const calls=[];
   const client={query:async(sql,params=[])=>{
     calls.push({sql,params});
     if(sql.includes("FROM idempotency_records"))return{rowCount:0,rows:[]};
     if(sql.includes("FROM devices d"))return{rowCount:1,rows:[{id:ids.device,location_id:ids.location,gln:"6901234567892"}]};
-    if(sql.includes("FROM serialized_objects so JOIN products"))return{rowCount:1,rows:[{id:ids.object,tenant_id:ids.tenant,product_id:ids.product,code:"010691234567890210LOT-A21SERIAL-1",level:rootLevel,status:"COMMISSIONED",parent_id:null,current_organization_id:ids.organization,sku:"SKU-1",gtin:"06912345678902",product_name:"Test product"}]};
+    if(sql.includes("FROM serialized_objects so JOIN products"))return{rowCount:1,rows:[{id:ids.object,tenant_id:ids.tenant,product_id:ids.product,code:"010691234567890210LOT-A21SERIAL-1",level:rootLevel,status:rootParentId?"PACKED":"COMMISSIONED",parent_id:rootParentId,current_organization_id:ids.organization,sku:"SKU-1",gtin:"06912345678902",product_name:"Test product"}]};
     if(sql.includes("WITH RECURSIVE tree AS"))return{rowCount:descendants.length,rows:descendants};
-    if(sql.includes("FROM business_documents"))return{rowCount:1,rows:[{id:ids.document,tenant_id:ids.tenant,document_type:"SHIPMENT",status:"APPROVED",from_organization_id:ids.organization,to_organization_id:ids.destination}]};
+    if(sql.includes("FROM business_documents"))return{rowCount:1,rows:[{id:ids.document,tenant_id:ids.tenant,document_type:documentType,status:"APPROVED",from_organization_id:ids.organization,to_organization_id:ids.destination}]};
     if(sql.includes("FROM business_document_objects"))return documentObject?{rowCount:1,rows:[{expected:true,object_snapshot:{id:ids.object}}]}:{rowCount:0,rows:[]};
-    if(sql.includes("INSERT INTO trace_events"))return{rowCount:1,rows:[{id:ids.event,event_type:"SHIPPING",event_time:"2026-08-28T09:00:00.000Z",verification_status:"VERIFIED"}]};
+    if(sql.includes("SELECT * FROM serialized_objects WHERE tenant_id=$1 AND (id=$2 OR code=$3)"))return{rowCount:parentRows.length,rows:parentRows};
+    if(sql.includes("INSERT INTO trace_events"))return{rowCount:1,rows:[{id:ids.event,event_type:eventType,event_time:"2026-08-28T09:00:00.000Z",read_point:"https://id.gs1.org/414/6901234567892",organization_id:ids.organization,verification_status:"VERIFIED"}]};
     return{rowCount:1,rows:[{}]};
   }};
   return{calls,query:async(sql,params)=>{calls.push({sql,params});if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};return client.query(sql,params);},transaction:work=>work(client)};
 }
 
-function request(){return{method:"POST",url:"/api/v1/trace-events",headers:{"x-reliacode-principal":principal,"x-reliacode-device-id":ids.device,"x-reliacode-device-token":deviceToken,"idempotency-key":"trace-route-shipping-0001"},payload:{eventType:"SHIPPING",objectCode:"010691234567890210LOT-A21SERIAL-1",documentId:ids.document,readPoint:"urn:ignored:when-device-is-required",eventTime:"2026-08-28T09:00:00.000Z",metadata:{source:"route-test"}}};}
+function request(payload={}){return{method:"POST",url:"/api/v1/trace-events",headers:{"x-reliacode-principal":principal,"x-reliacode-device-id":ids.device,"x-reliacode-device-token":deviceToken,"idempotency-key":"trace-route-shipping-0001"},payload:{eventType:"SHIPPING",objectCode:"010691234567890210LOT-A21SERIAL-1",documentId:ids.document,readPoint:"urn:ignored:when-device-is-required",eventTime:"2026-08-28T09:00:00.000Z",metadata:{source:"route-test"},...payload}};}
 
 test("state-changing trace route authorizes the device and enforces document membership",async t=>{
   const db=database(),app=await buildApp({config,db});t.after(()=>app.close());
@@ -79,4 +80,20 @@ test("one invalid child aborts a case action before any event is persisted",asyn
   assert.equal(response.json().code,"INVALID_STATE_TRANSITION");
   assert.equal(db.calls.some(call=>call.sql.includes("INSERT INTO trace_events")),false);
   assert.equal(db.calls.some(call=>call.sql.includes("UPDATE serialized_objects")),false);
+});
+
+test("repacking moves a child between parents as one event and two immutable relationship changes",async t=>{
+  const oldParent={id:"dddddddd-dddd-4ddd-8ddd-dddddddddddd",code:"OLD-CASE-0001",level:"CASE",status:"PACKED",current_organization_id:ids.organization};
+  const newParent={id:"eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee",code:"NEW-CASE-0001",level:"CASE",status:"COMMISSIONED",current_organization_id:ids.organization};
+  const db=database({rootParentId:oldParent.id,documentType:"PACKING_ORDER",eventType:"REPACKING",parentRows:[oldParent,newParent]}),app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject(request({eventType:"REPACKING",parentObjectCode:newParent.code}));
+  assert.equal(response.statusCode,201,response.body);
+  const objectUpdate=db.calls.find(call=>call.sql.includes("UPDATE serialized_objects SET status"));
+  assert.equal(objectUpdate.params[2],newParent.id);
+  const relationshipCalls=db.calls.filter(call=>call.sql.includes("INSERT INTO package_relationship_events"));
+  assert.deepEqual(relationshipCalls.map(call=>[call.params[1],call.params[3]]),[[oldParent.id,"DELETE"],[newParent.id,"ADD"]]);
+  const outbox=db.calls.find(call=>call.sql.includes("INSERT INTO event_outbox"));
+  assert.deepEqual(outbox.params[2].aggregations.map(item=>[item.parent.id,item.action]),[[oldParent.id,"DELETE"],[newParent.id,"ADD"]]);
+  const snapshots=JSON.parse(db.calls.find(call=>call.sql.includes("INSERT INTO trace_event_object_snapshots")).params[2]);
+  assert.equal(snapshots[0].parent_object_id,oldParent.id);assert.equal(snapshots[0].resulting_parent_object_id,newParent.id);
 });

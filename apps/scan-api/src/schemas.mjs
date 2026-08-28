@@ -8,7 +8,7 @@ export const codeBatchSchema = z.object({
 });
 
 export const traceEventSchema = z.object({
-  eventType: z.enum(["PACKING", "RECEIVING_DISTRIBUTOR", "RECEIVING_STORE", "UNPACKING", "SHIPPING", "RETURNING", "SELLING", "DESTROYING", "VERIFY"]),
+  eventType: z.enum(["PACKING", "RECEIVING_DISTRIBUTOR", "RECEIVING_STORE", "UNPACKING", "REPACKING", "SHIPPING", "RETURNING", "SELLING", "DESTROYING", "VERIFY"]),
   objectCode: z.string().trim().min(6).max(200).transform((value) => value.toUpperCase()),
   shipmentId: z.string().uuid().optional(),
   documentId: z.string().uuid().optional(),
@@ -18,7 +18,7 @@ export const traceEventSchema = z.object({
   metadata: z.record(z.string(), z.unknown()).default({})
 }).superRefine((value,ctx)=>{
   if(value.eventType!=="VERIFY"&&!value.documentId)ctx.addIssue({code:"custom",path:["documentId"],message:"A business document is required for state-changing events"});
-  if(value.eventType==="PACKING"&&!value.parentObjectCode)ctx.addIssue({code:"custom",path:["parentObjectCode"],message:"A parent object is required for packing"});
+  if(["PACKING","REPACKING"].includes(value.eventType)&&!value.parentObjectCode)ctx.addIssue({code:"custom",path:["parentObjectCode"],message:"A new parent object is required for packing or repacking"});
 });
 
 export const riskDecisionSchema = z.object({

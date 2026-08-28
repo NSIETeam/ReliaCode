@@ -6,7 +6,7 @@ import { parseIdempotencyKey } from "./schemas.mjs";
 import { assertSafeWebhookUrl,encryptWebhookSecret } from "./webhook-security.mjs";
 
 const uuid=z.string().uuid(),reason=z.string().trim().min(3).max(500);
-const eventType=z.enum(["PACKING","UNPACKING","SHIPPING","RECEIVING_DISTRIBUTOR","RECEIVING_STORE","RETURNING","SELLING","DESTROYING","RECALL_ACTIVATED","RISK_CASE_UPDATED"]);
+const eventType=z.enum(["PACKING","UNPACKING","REPACKING","SHIPPING","RECEIVING_DISTRIBUTOR","RECEIVING_STORE","RETURNING","SELLING","DESTROYING","RECALL_ACTIVATED","RISK_CASE_UPDATED"]);
 function unavailable(){const error=new Error("Webhook encryption is not configured");error.statusCode=503;error.code="WEBHOOK_NOT_CONFIGURED";throw error;}
 function notFound(){const error=new Error("Webhook endpoint not found");error.statusCode=404;error.code="NOT_FOUND";throw error;}
 async function tx(db,work){return typeof db.transaction==="function"?db.transaction(work):work(db);}
