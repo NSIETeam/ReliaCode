@@ -45,6 +45,22 @@ services:
       migrate: { condition: service_completed_successfully }
     restart: unless-stopped
 
+  web:
+    image: ${RELIACODE_WEB_IMAGE:-ghcr.io/nsieteam/reliacode-web:latest}
+    environment:
+      NODE_ENV: production
+      RELIACODE_API_URL: http://api:4180
+    ports: ["${WEB_PORT:-4173}:4173"]
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4173/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
 secrets:
   database_url:
     file: ./secrets/database_url.txt

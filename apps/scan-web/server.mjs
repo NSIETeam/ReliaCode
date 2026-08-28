@@ -19,6 +19,13 @@ const securityHeaders = {
   "Cross-Origin-Opener-Policy":"same-origin", "Cross-Origin-Resource-Policy":"same-origin"
 };
 
+export function runtimeConfig({ persistentWorkspace = Boolean(apiBaseUrl) } = {}) {
+  return `window.RELIACODE_CONFIG = Object.freeze(${JSON.stringify({
+    apiBaseUrl: "",
+    persistentWorkspace:Boolean(persistentWorkspace)
+  })});\n`;
+}
+
 function writeHeaders(response, extra = {}) {
   for (const [name, value] of Object.entries({ ...securityHeaders, ...extra })) response.setHeader(name, value);
 }
@@ -52,6 +59,11 @@ const server = createServer((request, response) => {
   if (pathname === "/health/live") {
     writeHeaders(response, { "Content-Type":"application/json; charset=utf-8", "Cache-Control":"no-store" });
     response.writeHead(200).end(JSON.stringify({ status:"ok" }));
+    return;
+  }
+  if (pathname === "/runtime-config.js") {
+    writeHeaders(response, { "Content-Type":"application/javascript; charset=utf-8", "Cache-Control":"no-store" });
+    response.writeHead(200).end(runtimeConfig());
     return;
   }
   if (!["GET","HEAD"].includes(request.method)) {

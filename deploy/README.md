@@ -14,12 +14,12 @@
 1. 复制 `.env.production.example` 为 `.env` 并填写真实公开配置。
 2. 在 `deploy/secrets/database_url.txt` 写入数据库连接串；该目录已被仓库根目录的 `secrets/` 规则排除。
 3. 固定部署镜像为提交标签，例如 `ghcr.io/nsieteam/reliacode-api:sha-<40位提交>`，不要长期依赖 `latest`。
-4. 执行一次迁移，再启动 API 和 outbox worker：
+4. 执行一次迁移，再启动 API、outbox worker 和 Web：
 
 ```powershell
 docker compose --env-file .env -f compose.production.yaml pull
 docker compose --env-file .env -f compose.production.yaml run --rm migrate
-docker compose --env-file .env -f compose.production.yaml up -d api outbox-worker
+docker compose --env-file .env -f compose.production.yaml up -d api outbox-worker web
 ```
 
 迁移器使用 PostgreSQL advisory lock，重复执行安全；API 的 `/health/ready` 只有在数据库包含当前要求的迁移版本时才返回 200。
@@ -31,7 +31,7 @@ curl.exe -fsS https://api.reliacode.example/health/live
 curl.exe -fsS https://api.reliacode.example/health/ready
 ```
 
-随后把 `apps/scan-web/runtime-config.js` 中的 `apiBaseUrl` 指向 API HTTPS 域名，重新发布 Pages，并完成一次“生成码 -> 打印标签 -> 异机扫码 -> 公共验证”的真实闭环。
+生产 Web 容器通过同源 `/api` 代理连接 API，并自动启用服务端持久化；不要把默认 GitHub Pages 构建当作生产写入口。随后完成一次“生成码 -> 打印标签 -> 异机扫码 -> 公共验证”的真实闭环。
 
 ## 回滚
 

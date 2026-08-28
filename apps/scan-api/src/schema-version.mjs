@@ -1,1 +1,1 @@
-export const REQUIRED_SCHEMA_VERSION = "006_organization_memberships.sql";
+export const REQUIRED_SCHEMA_VERSION = "010_workspace_normalization.sql";
