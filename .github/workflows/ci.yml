@@ -9,6 +9,17 @@ jobs:
   api:
     name: API tests
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16.4-alpine
+        env:
+          POSTGRES_USER: reliacode
+          POSTGRES_PASSWORD: test-only-password
+          POSTGRES_DB: reliacode_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U reliacode -d reliacode_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -18,6 +29,15 @@ jobs:
           cache-dependency-path: package-lock.json
       - run: npm ci
       - run: npm test --workspace @reliacode/scan-api
+      - name: Apply migrations twice to PostgreSQL 16
+        env:
+          NODE_ENV: test
+          AUTH_MODE: development
+          DATABASE_URL: postgres://reliacode:test-only-password@127.0.0.1:5432/reliacode_test
+          DATABASE_SSL: "false"
+        run: |
+          npm run migrate --workspace @reliacode/scan-api
+          npm run migrate --workspace @reliacode/scan-api
       - run: npm audit --workspace @reliacode/scan-api --omit=dev --audit-level=high
 
   web-browser:

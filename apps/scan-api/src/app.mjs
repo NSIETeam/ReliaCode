@@ -14,10 +14,11 @@ import { REQUIRED_SCHEMA_VERSION } from "./schema-version.mjs";
 import { observeHttpRequest, renderMetrics } from "./metrics.mjs";
 import { rotateLocalSession } from "./session-security.mjs";
 import { registerRecoveryRoutes } from "./recovery-routes.mjs";
+import { registerManualRecoveryRoutes } from "./manual-recovery-routes.mjs";
 
 export async function buildApp({ config, db }) {
   const app = Fastify({
-    logger: { level: config.LOG_LEVEL, redact: ["req.headers.authorization", "req.headers.cookie", "req.body.password", "req.body.newPassword", "req.body.token", "request.body.password", "request.body.newPassword", "request.body.token"] },
+    logger: { level: config.LOG_LEVEL, redact: ["req.headers.authorization", "req.headers.cookie", "req.body.password", "req.body.newPassword", "req.body.token", "req.body.credential", "request.body.password", "request.body.newPassword", "request.body.token", "request.body.credential"] },
     trustProxy: config.TRUST_PROXY,
     bodyLimit: 5 * 1024 * 1024,
     requestIdHeader: "x-request-id",
@@ -47,7 +48,7 @@ export async function buildApp({ config, db }) {
   app.addHook("onRequest", async (request, reply) => {
     const pathname = request.url.split("?",1)[0];
     const invitationAccept = pathname === "/api/auth/invitations/accept";
-    const passwordReset = pathname === "/api/auth/password-reset/request" || pathname === "/api/auth/password-reset/confirm" || pathname==="/api/auth/email-verification/confirm";
+    const passwordReset = pathname === "/api/auth/password-reset/request" || pathname === "/api/auth/password-reset/confirm" || pathname==="/api/auth/email-verification/confirm" || pathname==="/api/auth/manual-recovery/confirm";
     const hasAuthCredentials = Boolean(request.headers.authorization || request.headers.cookie);
     const passkeyLogin = pathname === "/api/auth/passkeys/authentication/options" || pathname === "/api/auth/passkeys/authentication/verify";
     const recoveryCodeLogin=pathname==="/api/auth/recovery-codes/consume";
@@ -112,6 +113,7 @@ export async function buildApp({ config, db }) {
   registerSupplyChainRoutes(app, { db, config });
   registerWebhookRoutes(app, { db, config });
   registerRecoveryRoutes(app,{db,config});
+  registerManualRecoveryRoutes(app,{db});
 
   app.setNotFoundHandler((request, reply) => reply.code(404).send({ code:"NOT_FOUND", message:"Route not found", requestId:request.id }));
   app.setErrorHandler((error, request, reply) => {
