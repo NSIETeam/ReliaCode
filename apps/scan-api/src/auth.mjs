@@ -3,12 +3,12 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 
 export const ROLE_CAPABILITIES = Object.freeze({
   PLATFORM_OPERATOR: ["platform:tenants:read", "platform:tenants:write", "platform:audit:read"],
-  TENANT_OWNER: ["tenant:manage", "products:write", "codes:write", "codes:approve", "objects:read", "events:read", "campaigns:write", "risks:review", "recalls:write", "ledger:read", "members:read", "members:invite", "members:manage", "relationships:write", "locations:write", "devices:write", "documents:write", "integrations:write"],
-  BRAND_ADMIN: ["products:write", "codes:write", "codes:approve", "objects:read", "events:read", "campaigns:write", "risks:review", "recalls:write", "ledger:read", "members:read", "members:invite", "members:manage", "relationships:write", "locations:write", "devices:write", "documents:write", "integrations:write"],
+  TENANT_OWNER: ["tenant:manage", "products:write", "codes:write", "codes:approve", "objects:read", "events:read", "events:write:packing", "events:write:unpacking", "events:write:shipping", "events:write:returning", "events:write:selling", "events:write:destroying", "campaigns:write", "risks:review", "recalls:write", "ledger:read", "members:read", "members:invite", "members:manage", "relationships:write", "locations:write", "devices:write", "documents:write", "integrations:write"],
+  BRAND_ADMIN: ["products:write", "codes:write", "codes:approve", "objects:read", "events:read", "events:write:packing", "events:write:unpacking", "events:write:shipping", "events:write:returning", "events:write:selling", "events:write:destroying", "campaigns:write", "risks:review", "recalls:write", "ledger:read", "members:read", "members:invite", "members:manage", "relationships:write", "locations:write", "devices:write", "documents:write", "integrations:write"],
   BRAND_AUDITOR: ["objects:read", "events:read", "risks:review", "ledger:read"],
-  FACTORY_OPERATOR: ["objects:read", "events:write:packing"],
-  DISTRIBUTOR_RECEIVER: ["objects:read", "events:write:distributor_receiving"],
-  STORE_RECEIVER: ["objects:read", "events:write:store_receiving", "ledger:read:self"],
+  FACTORY_OPERATOR: ["objects:read", "events:write:packing", "events:write:unpacking", "events:write:shipping", "events:write:destroying"],
+  DISTRIBUTOR_RECEIVER: ["objects:read", "events:write:distributor_receiving", "events:write:shipping", "events:write:returning"],
+  STORE_RECEIVER: ["objects:read", "events:write:store_receiving", "events:write:returning", "events:write:selling", "ledger:read:self"],
   FINANCE: ["ledger:read", "settlements:write"],
   READ_ONLY_AUDITOR: ["objects:read", "events:read", "ledger:read"]
 });
@@ -71,8 +71,8 @@ export async function createAuthenticator(config) {
         id: 'local-admin',
         tenantId: config.ADMIN_TENANT_ID,
         organizationId: config.ADMIN_ORGANIZATION_ID,
-        role: 'BRAND_ADMIN',
-        capabilities: new Set(ROLE_CAPABILITIES.BRAND_ADMIN),
+        role: 'PLATFORM_OPERATOR',
+        capabilities: new Set(ROLE_CAPABILITIES.PLATFORM_OPERATOR),
         name: config.ADMIN_USERNAME
       };
     };

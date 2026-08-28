@@ -1,6 +1,6 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID as randomUuid } from "node:crypto";
 import { z } from "zod";
-import { requireCapability, hashToken } from "./auth.mjs";
+import { requireCapability, hashPassword, hashToken } from "./auth.mjs";
 import { getIdempotentResponse, lockIdempotencyKey, requestHash, saveIdempotentResponse } from "./idempotency.mjs";
 import { parseIdempotencyKey } from "./schemas.mjs";
 
@@ -44,6 +44,7 @@ async function command(db, request, operation, input, work) {
     return { status:body.status || 200, body:body.value };
   });
 }
+async function platformCommand(db,request,operation,input,work){const key=parseIdempotencyKey(request),hash=requestHash(operation,input);return tx(db,async(client)=>{await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",["platform:"+key]);const existing=await client.query("SELECT request_hash,response_status,response_body FROM platform_idempotency_records WHERE idempotency_key=$1 AND expires_at>now()",[key]);if(existing.rowCount){if(existing.rows[0].request_hash!==hash){const e=new Error("Idempotency key was already used with a different request");e.statusCode=409;e.code="IDEMPOTENCY_CONFLICT";throw e;}return{status:existing.rows[0].response_status,body:existing.rows[0].response_body};}const result=await work(client);await client.query(`INSERT INTO platform_idempotency_records(idempotency_key,operation,request_hash,response_status,response_body,expires_at) VALUES($1,$2,$3,$4,$5,now()+interval '24 hours')`,[key,operation,hash,result.status||200,result.value]);return{status:result.status||200,body:result.value};});}
 
 export function registerSaasRoutes(app, { db }) {
   app.post("/api/v1/tenant-applications", { config:{ rateLimit:{ max:10, timeWindow:"1 hour" } } }, async (request, reply) => {
@@ -77,8 +78,7 @@ export function registerSaasRoutes(app, { db }) {
     requireCapability(request.principal,"platform:tenants:write");
     const applicationId=uuid.parse(request.params.id);
     const body=z.object({ action:z.enum(["APPROVE","REJECT"]), reason, plan:z.enum(["free","team","enterprise"]).default("free") }).parse(request.body);
-    const key=parseIdempotencyKey(request);
-    const result=await tx(db,async(client)=>{
+    const response=await platformCommand(db,request,"TENANT_APPLICATION_DECISION",{applicationId,...body},async(client)=>{
       const found=await client.query("SELECT * FROM tenant_applications WHERE id=$1 FOR UPDATE",[applicationId]);
       if(!found.rowCount) notFound("Tenant application not found");
       if(found.rows[0].status!=="PENDING"){ const e=new Error("Application was already reviewed");e.statusCode=409;e.code="APPLICATION_FINAL";throw e; }
@@ -86,7 +86,8 @@ export function registerSaasRoutes(app, { db }) {
       if(body.action==="APPROVE"){
         const tenant=await client.query("INSERT INTO tenants(name,status,plan,approved_at) VALUES($1,'ACTIVE',$2,now()) RETURNING id",[found.rows[0].company_name,body.plan]);
         tenantId=tenant.rows[0].id;
-        await client.query("INSERT INTO organizations(tenant_id,type,name) VALUES($1,'BRAND',$2)",[tenantId,found.rows[0].company_name]);
+        const organization=await client.query("INSERT INTO organizations(tenant_id,type,name) VALUES($1,'BRAND',$2) RETURNING id",[tenantId,found.rows[0].company_name]);
+        await client.query("INSERT INTO local_organizations(id,tenant_id,name) VALUES($1,$2,$3)",[organization.rows[0].id,tenantId,found.rows[0].company_name]);
         await client.query("INSERT INTO tenant_settings(tenant_id) VALUES($1)",[tenantId]);
       }
       const changed=await client.query(
@@ -98,10 +99,19 @@ export function registerSaasRoutes(app, { db }) {
          VALUES($1,'TENANT_APPLICATION_DECISION','TENANT_APPLICATION',$2,$3,$4,$5,$6)`,
         [request.principal.id,applicationId,body.reason,request.id,found.rows[0],changed.rows[0]]
       );
-      return changed.rows[0];
+      return {value:changed.rows[0]};
     });
-    reply.header("idempotency-key",key);
-    return reply.send(result);
+    return reply.code(response.status).send(response.body);
+  });
+
+  app.post("/api/v1/platform/tenants/:id/owner",async(request,reply)=>{
+    requireCapability(request.principal,"platform:tenants:write");const tenantId=uuid.parse(request.params.id);
+    const body=z.object({applicationId:uuid,username:z.string().trim().min(3).max(32).regex(/^[\p{L}\p{N}_-]+$/u),temporaryPassword:z.string().min(12).max(200).refine(value=>/\p{L}/u.test(value)&&/\p{N}/u.test(value),"Password must contain letters and numbers"),reason}).parse(request.body);
+    const input={tenantId,applicationId:body.applicationId,username:body.username,reason:body.reason,passwordDigest:hashToken(body.temporaryPassword)};
+    const response=await platformCommand(db,request,"TENANT_OWNER_PROVISION",input,async(client)=>{const tenant=await client.query(`SELECT t.id,t.status,a.contact_email,o.id organization_id,o.name organization_name
+       FROM tenants t JOIN tenant_applications a ON a.tenant_id=t.id AND a.id=$2
+       JOIN organizations o ON o.tenant_id=t.id AND o.type='BRAND' WHERE t.id=$1 AND a.status='APPROVED' FOR UPDATE OF t`,[tenantId,body.applicationId]);if(!tenant.rowCount)notFound("Approved tenant not found");if(tenant.rows[0].status!=="ACTIVE"){const e=new Error("Tenant is not active");e.statusCode=409;e.code="TENANT_INACTIVE";throw e;}const userId=randomUuid();const normalizedUsername=body.username.toLowerCase();const normalizedContact=String(tenant.rows[0].contact_email).toLowerCase();const created=await client.query(`INSERT INTO local_users(id,username,normalized_username,email,normalized_email,password_hash,tenant_id,organization_id,role)
+       VALUES($1,$2,$3,$4,$5,$6,$7,$8,'TENANT_OWNER') ON CONFLICT DO NOTHING RETURNING id,username,email,tenant_id,organization_id,role`,[userId,body.username,normalizedUsername,tenant.rows[0].contact_email,normalizedContact,hashPassword(body.temporaryPassword),tenantId,tenant.rows[0].organization_id]);if(!created.rowCount){const e=new Error("Owner username or email already exists");e.statusCode=409;e.code="ACCOUNT_EXISTS";throw e;}await client.query("INSERT INTO local_memberships(id,user_id,organization_id,role) VALUES($1,$2,$3,'TENANT_OWNER')",[randomUuid(),userId,tenant.rows[0].organization_id]);await client.query("UPDATE local_organizations SET owner_user_id=$1 WHERE id=$2",[userId,tenant.rows[0].organization_id]);await client.query(`INSERT INTO platform_audit_log(actor_id,action,entity_type,entity_id,reason,request_id,after_state) VALUES($1,'TENANT_OWNER_PROVISION','LOCAL_USER',$2,$3,$4,$5)`,[request.principal.id,userId,body.reason,request.id,{tenantId,email:tenant.rows[0].contact_email,role:"TENANT_OWNER"}]);return{status:201,value:created.rows[0]};});return reply.code(response.status).send(response.body);
   });
 
   app.get("/api/v1/products", async (request) => {
@@ -154,7 +164,7 @@ export function registerSaasRoutes(app, { db }) {
 
   app.get("/api/v1/documents",async(request)=>{requireCapability(request.principal,"events:read");const result=await db.query("SELECT * FROM business_documents WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200",[request.principal.tenantId]);return{items:result.rows};});
   app.post("/api/v1/documents",async(request,reply)=>{
-    requireCapability(request.principal,"documents:write");const body=z.object({documentType:z.enum(["PRODUCTION_ORDER","PACKING_ORDER","SHIPMENT","RECEIPT","RETURN","DESTRUCTION"]),reference:z.string().trim().min(1).max(120),fromOrganizationId:uuid.optional(),toOrganizationId:uuid.optional(),metadata:z.record(z.string(),z.unknown()).default({}),auditReason:reason}).parse(request.body);
+    requireCapability(request.principal,"documents:write");const body=z.object({documentType:z.enum(["PRODUCTION_ORDER","PACKING_ORDER","SHIPMENT","RECEIPT","SALE","RETURN","DESTRUCTION"]),reference:z.string().trim().min(1).max(120),fromOrganizationId:uuid.optional(),toOrganizationId:uuid.optional(),metadata:z.record(z.string(),z.unknown()).default({}),auditReason:reason}).superRefine((value,ctx)=>{if(["PRODUCTION_ORDER","PACKING_ORDER","SHIPMENT","SALE","RETURN","DESTRUCTION"].includes(value.documentType)&&!value.fromOrganizationId)ctx.addIssue({code:"custom",path:["fromOrganizationId"],message:"Source organization is required"});if(["SHIPMENT","RECEIPT"].includes(value.documentType)&&!value.toOrganizationId)ctx.addIssue({code:"custom",path:["toOrganizationId"],message:"Destination organization is required"});}).parse(request.body);
     const response=await command(db,request,"DOCUMENT_CREATE",body,async(client)=>{for(const orgId of [body.fromOrganizationId,body.toOrganizationId].filter(Boolean)){const org=await client.query("SELECT 1 FROM organizations WHERE tenant_id=$1 AND id=$2",[request.principal.tenantId,orgId]);if(!org.rowCount)notFound("Organization not found");}const created=await client.query(`INSERT INTO business_documents(tenant_id,document_type,reference,from_organization_id,to_organization_id,metadata,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[request.principal.tenantId,body.documentType,body.reference,body.fromOrganizationId||null,body.toOrganizationId||null,body.metadata,request.principal.id]);await tenantAudit(client,request,"DOCUMENT_CREATE","BUSINESS_DOCUMENT",created.rows[0].id,null,created.rows[0]);return{status:201,value:created.rows[0]};});return reply.code(response.status).send(response.body);
   });
   app.post("/api/v1/documents/:id/transition",async(request,reply)=>{
@@ -182,19 +192,43 @@ export function registerSaasRoutes(app, { db }) {
       await tenantAudit(client,request,"CODE_JOB_APPROVE","CODE_GENERATION_JOB",id,found.rows[0],changed.rows[0]); return {value:changed.rows[0]};
     }); return reply.code(response.status).send(response.body);
   });
+  app.post("/api/v1/code-jobs/:id/cancel",async(request,reply)=>{
+    requireCapability(request.principal,"codes:write");const id=uuid.parse(request.params.id),body=z.object({auditReason:reason}).parse(request.body);
+    const response=await command(db,request,"CODE_JOB_CANCEL",{id,...body},async(client)=>{const found=await client.query("SELECT * FROM code_generation_jobs WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[request.principal.tenantId,id]);if(!found.rowCount)notFound();if(!["PENDING_APPROVAL","QUEUED","RUNNING"].includes(found.rows[0].status)){const e=new Error("Job cannot be cancelled in its current state");e.statusCode=409;e.code="INVALID_STATE";throw e;}const changed=await client.query("UPDATE code_generation_jobs SET status='CANCELLED',completed_at=now() WHERE id=$1 RETURNING *",[id]);await tenantAudit(client,request,"CODE_JOB_CANCEL","CODE_GENERATION_JOB",id,found.rows[0],changed.rows[0]);return{value:changed.rows[0]};});return reply.code(response.status).send(response.body);
+  });
+  app.post("/api/v1/code-jobs/:id/retry",async(request,reply)=>{
+    requireCapability(request.principal,"codes:approve");const id=uuid.parse(request.params.id),body=z.object({auditReason:reason}).parse(request.body);
+    const response=await command(db,request,"CODE_JOB_RETRY",{id,...body},async(client)=>{const found=await client.query("SELECT * FROM code_generation_jobs WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[request.principal.tenantId,id]);if(!found.rowCount)notFound();if(found.rows[0].status!=="FAILED"){const e=new Error("Only failed jobs can be retried");e.statusCode=409;e.code="INVALID_STATE";throw e;}const changed=await client.query("UPDATE code_generation_jobs SET status='QUEUED',last_error=NULL,completed_at=NULL,approved_by=$1 WHERE id=$2 RETURNING *",[request.principal.id,id]);await tenantAudit(client,request,"CODE_JOB_RETRY","CODE_GENERATION_JOB",id,found.rows[0],changed.rows[0]);return{value:changed.rows[0]};});return reply.code(response.status).send(response.body);
+  });
 
   app.get("/api/v1/recalls",async(request)=>{requireCapability(request.principal,"events:read");const result=await db.query("SELECT * FROM recalls WHERE tenant_id=$1 ORDER BY created_at DESC",[request.principal.tenantId]);return {items:result.rows};});
   app.post("/api/v1/recalls",async(request,reply)=>{
-    requireCapability(request.principal,"recalls:write"); const body=z.object({reference:z.string().trim().min(1).max(100),title:z.string().trim().min(1).max(200),reason:reason,scope:z.object({productIds:z.array(uuid).max(100).default([]),lots:z.array(z.string().max(120)).max(100).default([])}),auditReason:reason}).parse(request.body);
+    requireCapability(request.principal,"recalls:write"); const body=z.object({reference:z.string().trim().min(1).max(100),title:z.string().trim().min(1).max(200),reason:reason,scope:z.object({productIds:z.array(uuid).max(100).default([]),lots:z.array(z.string().trim().min(1).max(120)).max(100).default([])}).refine(value=>value.productIds.length>0||value.lots.length>0,{message:"Recall scope must select at least one product or lot"}),auditReason:reason}).parse(request.body);
     const response=await command(db,request,"RECALL_CREATE",body,async(client)=>{const created=await client.query("INSERT INTO recalls(tenant_id,reference,title,reason,scope,created_by) VALUES($1,$2,$3,$4,$5,$6) RETURNING *",[request.principal.tenantId,body.reference,body.title,body.reason,body.scope,request.principal.id]);await tenantAudit(client,request,"RECALL_CREATE","RECALL",created.rows[0].id,null,created.rows[0]);return {status:201,value:created.rows[0]};});return reply.code(response.status).send(response.body);
   });
   app.post("/api/v1/recalls/:id/activate",async(request,reply)=>{
     requireCapability(request.principal,"recalls:write"); const id=uuid.parse(request.params.id); const body=z.object({auditReason:reason}).parse(request.body);
-    const response=await command(db,request,"RECALL_ACTIVATE",{id,...body},async(client)=>{const found=await client.query("SELECT * FROM recalls WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[request.principal.tenantId,id]);if(!found.rowCount)notFound();if(found.rows[0].status!=="DRAFT"){const e=new Error("Recall is not a draft");e.statusCode=409;e.code="INVALID_STATE";throw e;}const changed=await client.query("UPDATE recalls SET status='ACTIVE',activated_by=$1,activated_at=now() WHERE id=$2 RETURNING *",[request.principal.id,id]);await tenantAudit(client,request,"RECALL_ACTIVATE","RECALL",id,found.rows[0],changed.rows[0]);return {value:changed.rows[0]};});return reply.code(response.status).send(response.body);
+    const response=await command(db,request,"RECALL_ACTIVATE",{id,...body},async(client)=>{const found=await client.query("SELECT * FROM recalls WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[request.principal.tenantId,id]);if(!found.rowCount)notFound();if(found.rows[0].status!=="DRAFT"){const e=new Error("Recall is not a draft");e.statusCode=409;e.code="INVALID_STATE";throw e;}const snapshot=await client.query(`INSERT INTO recall_objects(recall_id,tenant_id,object_id,latest_status,latest_organization_id)
+       SELECT $1,so.tenant_id,so.id,so.status,so.current_organization_id FROM serialized_objects so
+       WHERE so.tenant_id=$2 AND ((jsonb_array_length($3::jsonb->'productIds')>0 AND ($3::jsonb->'productIds') ? so.product_id::text)
+         OR (jsonb_array_length($3::jsonb->'lots')>0 AND ($3::jsonb->'lots') ? COALESCE(so.lot,'')))
+       ON CONFLICT (recall_id,object_id) DO NOTHING RETURNING object_id`,[id,request.principal.tenantId,found.rows[0].scope]);const changed=await client.query("UPDATE recalls SET status='ACTIVE',activated_by=$1,activated_at=now() WHERE id=$2 RETURNING *",[request.principal.id,id]);const value={...changed.rows[0],objectCount:snapshot.rowCount};await tenantAudit(client,request,"RECALL_ACTIVATE","RECALL",id,found.rows[0],value);return {value};});return reply.code(response.status).send(response.body);
   });
 
+  app.get("/api/v1/supply-relationships",async(request)=>{requireCapability(request.principal,"objects:read");const result=await db.query(`SELECT id,source_tenant_id,target_tenant_id,target_email,relationship_type,scopes,status,accepted_at,updated_at,created_at
+     FROM supply_relationships WHERE source_tenant_id=$1 OR target_tenant_id=$1 ORDER BY created_at DESC`,[request.principal.tenantId]);return{items:result.rows};});
   app.post("/api/v1/supply-relationships",async(request,reply)=>{
     requireCapability(request.principal,"relationships:write"); const body=z.object({targetTenantId:uuid.optional(),targetEmail:email.optional(),relationshipType:z.enum(["MANUFACTURER","DISTRIBUTOR","RETAILER","LOGISTICS","SERVICE_PROVIDER"]),scopes:z.array(z.enum(["TRACE_READ","SHIPMENT_WRITE","RECEIPT_WRITE","RECALL_READ"])).min(1).max(10),auditReason:reason}).refine(v=>v.targetTenantId||v.targetEmail,{message:"A target tenant or email is required"}).parse(request.body);
     const response=await command(db,request,"RELATIONSHIP_INVITE",body,async(client)=>{const token=randomBytes(32).toString("base64url");const created=await client.query(`INSERT INTO supply_relationships(source_tenant_id,target_tenant_id,target_email,relationship_type,scopes,invitation_token_hash,invited_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,source_tenant_id,target_tenant_id,target_email,relationship_type,scopes,status,created_at`,[request.principal.tenantId,body.targetTenantId||null,body.targetEmail||null,body.relationshipType,body.scopes,hashToken(token),request.principal.id]);await tenantAudit(client,request,"RELATIONSHIP_INVITE","SUPPLY_RELATIONSHIP",created.rows[0].id,null,created.rows[0]);return {status:201,value:{relationship:created.rows[0],invitationToken:token}};});return reply.code(response.status).send(response.body);
   });
+  app.post("/api/v1/supply-relationships/accept",async(request,reply)=>{
+    requireCapability(request.principal,"relationships:write");const body=z.object({invitationToken:z.string().min(32).max(200),auditReason:reason}).parse(request.body);
+    const response=await command(db,request,"RELATIONSHIP_ACCEPT",{tokenHash:hashToken(body.invitationToken),auditReason:body.auditReason},async(client)=>{const found=await client.query("SELECT * FROM supply_relationships WHERE invitation_token_hash=$1 AND status='INVITED' FOR UPDATE",[hashToken(body.invitationToken)]);if(!found.rowCount)notFound("Relationship invitation not found");const relationship=found.rows[0];if(relationship.source_tenant_id===request.principal.tenantId)notFound("Relationship invitation not found");if(relationship.target_tenant_id&&relationship.target_tenant_id!==request.principal.tenantId)notFound("Relationship invitation not found");if(relationship.target_email&&normalizedEmail(request.principal.email)!==normalizedEmail(relationship.target_email)&&!relationship.target_tenant_id)notFound("Relationship invitation not found");const changed=await client.query("UPDATE supply_relationships SET target_tenant_id=$1,status='ACTIVE',accepted_by=$2,accepted_at=now(),updated_at=now(),invitation_token_hash=NULL WHERE id=$3 RETURNING id,source_tenant_id,target_tenant_id,relationship_type,scopes,status,accepted_at,updated_at,created_at",[request.principal.tenantId,request.principal.id,relationship.id]);await tenantAudit(client,request,"RELATIONSHIP_ACCEPT","SUPPLY_RELATIONSHIP",relationship.id,relationship,changed.rows[0]);return{value:changed.rows[0]};});return reply.code(response.status).send(response.body);
+  });
+  app.post("/api/v1/supply-relationships/:id/status",async(request,reply)=>{
+    requireCapability(request.principal,"relationships:write");const id=uuid.parse(request.params.id),body=z.object({status:z.enum(["ACTIVE","PAUSED","REVOKED"]),auditReason:reason}).parse(request.body);
+    const response=await command(db,request,"RELATIONSHIP_STATUS",{id,...body},async(client)=>{const found=await client.query("SELECT * FROM supply_relationships WHERE id=$1 AND source_tenant_id=$2 FOR UPDATE",[id,request.principal.tenantId]);if(!found.rowCount)notFound();const allowed={ACTIVE:["PAUSED","REVOKED"],PAUSED:["ACTIVE","REVOKED"]};if(!allowed[found.rows[0].status]?.includes(body.status)){const e=new Error("Invalid relationship state transition");e.statusCode=409;e.code="INVALID_STATE";throw e;}const changed=await client.query("UPDATE supply_relationships SET status=$1,updated_at=now() WHERE id=$2 RETURNING *",[body.status,id]);await tenantAudit(client,request,"RELATIONSHIP_STATUS","SUPPLY_RELATIONSHIP",id,found.rows[0],changed.rows[0]);return{value:changed.rows[0]};});return reply.code(response.status).send(response.body);
+  });
 }
+
+function normalizedEmail(value){return String(value||"").trim().toLowerCase();}

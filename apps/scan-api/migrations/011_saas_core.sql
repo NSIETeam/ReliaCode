@@ -86,7 +86,7 @@ CREATE INDEX IF NOT EXISTS devices_tenant_location_idx ON devices(tenant_id,loca
 CREATE TABLE IF NOT EXISTS business_documents (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id),
-  document_type text NOT NULL CHECK (document_type IN ('PRODUCTION_ORDER','PACKING_ORDER','SHIPMENT','RECEIPT','RETURN','DESTRUCTION')),
+  document_type text NOT NULL CHECK (document_type IN ('PRODUCTION_ORDER','PACKING_ORDER','SHIPMENT','RECEIPT','SALE','RETURN','DESTRUCTION')),
   reference text NOT NULL,
   from_organization_id uuid REFERENCES organizations(id),
   to_organization_id uuid REFERENCES organizations(id),
@@ -154,6 +154,11 @@ CREATE TABLE IF NOT EXISTS package_relationship_events (
   CHECK (parent_object_id <> child_object_id)
 );
 CREATE INDEX IF NOT EXISTS package_relationship_events_child_idx ON package_relationship_events(tenant_id,child_object_id,occurred_at DESC);
+DROP TRIGGER IF EXISTS package_relationship_events_append_only ON package_relationship_events;
+CREATE TRIGGER package_relationship_events_append_only BEFORE UPDATE OR DELETE ON package_relationship_events
+FOR EACH ROW EXECUTE FUNCTION reject_update_delete();
+
+ALTER TABLE trace_events ADD COLUMN IF NOT EXISTS business_document_id uuid REFERENCES business_documents(id);
 
 CREATE TABLE IF NOT EXISTS recalls (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -180,6 +185,23 @@ CREATE TABLE IF NOT EXISTS recall_objects (
   acknowledged_at timestamptz,
   PRIMARY KEY (recall_id,object_id)
 );
+
+CREATE UNIQUE INDEX IF NOT EXISTS business_documents_tenant_id_id_uq ON business_documents(tenant_id,id);
+CREATE UNIQUE INDEX IF NOT EXISTS serialized_objects_tenant_id_id_uq ON serialized_objects(tenant_id,id);
+CREATE UNIQUE INDEX IF NOT EXISTS recalls_tenant_id_id_uq ON recalls(tenant_id,id);
+ALTER TABLE trace_events DROP CONSTRAINT IF EXISTS trace_events_business_document_id_fkey;
+ALTER TABLE trace_events DROP CONSTRAINT IF EXISTS trace_events_tenant_business_document_fk;
+ALTER TABLE trace_events ADD CONSTRAINT trace_events_tenant_business_document_fk
+  FOREIGN KEY (tenant_id,business_document_id) REFERENCES business_documents(tenant_id,id);
+ALTER TABLE recall_objects DROP CONSTRAINT IF EXISTS recall_objects_tenant_object_fk;
+ALTER TABLE recall_objects ADD CONSTRAINT recall_objects_tenant_object_fk
+  FOREIGN KEY (tenant_id,object_id) REFERENCES serialized_objects(tenant_id,id);
+ALTER TABLE package_relationship_events DROP CONSTRAINT IF EXISTS package_relationship_events_tenant_parent_fk;
+ALTER TABLE package_relationship_events ADD CONSTRAINT package_relationship_events_tenant_parent_fk
+  FOREIGN KEY (tenant_id,parent_object_id) REFERENCES serialized_objects(tenant_id,id);
+ALTER TABLE package_relationship_events DROP CONSTRAINT IF EXISTS package_relationship_events_tenant_child_fk;
+ALTER TABLE package_relationship_events ADD CONSTRAINT package_relationship_events_tenant_child_fk
+  FOREIGN KEY (tenant_id,child_object_id) REFERENCES serialized_objects(tenant_id,id);
 
 CREATE TABLE IF NOT EXISTS webauthn_credentials (
   id text PRIMARY KEY,
@@ -257,6 +279,16 @@ CREATE TABLE IF NOT EXISTS platform_audit_log (
 DROP TRIGGER IF EXISTS platform_audit_log_append_only ON platform_audit_log;
 CREATE TRIGGER platform_audit_log_append_only BEFORE UPDATE OR DELETE ON platform_audit_log
 FOR EACH ROW EXECUTE FUNCTION reject_update_delete();
+
+CREATE TABLE IF NOT EXISTS platform_idempotency_records (
+  idempotency_key text PRIMARY KEY,
+  operation text NOT NULL,
+  request_hash text NOT NULL,
+  response_status integer NOT NULL,
+  response_body jsonb NOT NULL,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  expires_at timestamptz NOT NULL
+);
 
 ALTER TABLE local_memberships DROP CONSTRAINT IF EXISTS local_memberships_role_check;
 ALTER TABLE local_memberships ADD CONSTRAINT local_memberships_role_check CHECK (role IN (

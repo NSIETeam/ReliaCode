@@ -1,14 +1,8 @@
 import { loadConfig } from "./config.mjs";
 import { createDatabase } from "./db.mjs";
+import { pathToFileURL } from "node:url";
 
-const config=loadConfig();
-if(!config.GS1_DIGITAL_LINK_BASE_URL || config.GS1_DIGITAL_LINK_BASE_URL.includes(".example")) {
-  throw new Error("GS1_DIGITAL_LINK_BASE_URL must use the production verification domain");
-}
-const db=createDatabase(config);
-let stopping=false;
-
-async function processChunk() {
+export async function processCodeJobChunk(db,config) {
   return db.transaction(async(client)=>{
     const selected=await client.query(
       `SELECT j.*,p.gtin FROM code_generation_jobs j JOIN products p ON p.id=j.product_id AND p.tenant_id=j.tenant_id
@@ -51,8 +45,10 @@ async function processChunk() {
   });
 }
 
-process.on("SIGTERM",()=>{stopping=true;});
-process.on("SIGINT",()=>{stopping=true;});
-try {
-  while(!stopping){ if(!(await processChunk())) await new Promise(resolve=>setTimeout(resolve,1000)); }
-} finally { await db.close(); }
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+  const config=loadConfig();
+  if(!config.GS1_DIGITAL_LINK_BASE_URL || config.GS1_DIGITAL_LINK_BASE_URL.includes(".example")) throw new Error("GS1_DIGITAL_LINK_BASE_URL must use the production verification domain");
+  const db=createDatabase(config);let stopping=false;
+  process.on("SIGTERM",()=>{stopping=true;});process.on("SIGINT",()=>{stopping=true;});
+  try {while(!stopping){if(!(await processCodeJobChunk(db,config)))await new Promise(resolve=>setTimeout(resolve,1000));}}finally{await db.close();}
+}

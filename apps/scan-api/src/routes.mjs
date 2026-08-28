@@ -375,8 +375,8 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
     loginAttempts.delete(key);
     const session=await createSession(db,config,user?.id || null);
     reply.header('set-cookie',sessionCookies(config,session.token,session.csrf));
-    const role=String(user?.role || 'BRAND_ADMIN').toUpperCase();
-    return { authenticated:true, csrfToken:session.csrf, user:{ id:user?.id || 'local-admin', name:user?.username || config.ADMIN_USERNAME, email:user?.email || null, role, capabilities:ROLE_CAPABILITIES[role] || ROLE_CAPABILITIES.BRAND_ADMIN, tenantId:user?.tenant_id || config.ADMIN_TENANT_ID, organizationId:user?.organization_id || config.ADMIN_ORGANIZATION_ID } };
+    const role=String(user?.role || 'PLATFORM_OPERATOR').toUpperCase();
+    return { authenticated:true, csrfToken:session.csrf, user:{ id:user?.id || 'local-admin', name:user?.username || config.ADMIN_USERNAME, email:user?.email || null, role, capabilities:ROLE_CAPABILITIES[role] || ROLE_CAPABILITIES.PLATFORM_OPERATOR, tenantId:user?.tenant_id || config.ADMIN_TENANT_ID, organizationId:user?.organization_id || config.ADMIN_ORGANIZATION_ID } };
   });
 
   app.get('/api/auth/session', async (request, reply) => {
@@ -455,7 +455,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
   });
 
   app.put('/api/v1/workspace', async (request, reply) => {
-    requireAnyCapability(request.principal, ['codes:write','events:write:packing','events:write:distributor_receiving','events:write:store_receiving']);
+    if(request.principal.id!=='local-admin')requireAnyCapability(request.principal, ['codes:write','events:write:packing','events:write:distributor_receiving','events:write:store_receiving']);
     const body = z.object({ version:z.coerce.number().int().min(0), workspace:z.unknown() }).parse(request.body);
     const state = parseWorkspace(body.workspace);
     const result = await db.transaction(async (client) => {
@@ -476,7 +476,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
   });
 
   app.post('/api/v1/workspace/reset', async (request, reply) => {
-    requireCapability(request.principal, 'codes:write');
+    if(request.principal.id!=='local-admin')requireCapability(request.principal, 'codes:write');
     const body = z.object({ version:z.coerce.number().int().min(0).optional() }).strict().default({}).parse(request.body);
     const result = await db.transaction(async (client) => {
       const legacy=request.principal.id==='local-admin';
@@ -623,6 +623,17 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       );
       if (!found.rowCount) { const error=new Error("Reliable code not found");error.statusCode=404;error.code="OBJECT_NOT_FOUND";throw error; }
       const object = found.rows[0];
+      let businessDocument = null;
+      if (body.documentId) {
+        const expectedType={PACKING:"PACKING_ORDER",UNPACKING:"PACKING_ORDER",SHIPPING:"SHIPMENT",RECEIVING_DISTRIBUTOR:"RECEIPT",RECEIVING_STORE:"RECEIPT",RETURNING:"RETURN",SELLING:"SALE",DESTROYING:"DESTRUCTION"}[body.eventType];
+        const documentResult=await client.query("SELECT * FROM business_documents WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[request.principal.tenantId,body.documentId]);
+        if(!documentResult.rowCount){const error=new Error("Business document not found");error.statusCode=404;error.code="DOCUMENT_NOT_FOUND";throw error;}
+        businessDocument=documentResult.rows[0];
+        if(businessDocument.document_type!==expectedType||!["APPROVED","IN_PROGRESS"].includes(businessDocument.status)){const error=new Error("Business document is not approved for this event");error.statusCode=409;error.code="DOCUMENT_NOT_ACTIONABLE";throw error;}
+        const receiving=body.eventType.startsWith("RECEIVING_");
+        const authorizedOrganization=receiving?businessDocument.to_organization_id:businessDocument.from_organization_id;
+        if(authorizedOrganization&&authorizedOrganization!==request.principal.organizationId){const error=new Error("Business document does not authorize this organization");error.statusCode=404;error.code="DOCUMENT_NOT_FOUND";throw error;}
+      }
       let shipment = null;
       if (body.shipmentId) {
         const shipmentResult = await client.query(
@@ -637,10 +648,19 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
         const error = new Error(`Event rejected: ${verification.risk.type}`); error.statusCode=409; error.code=verification.risk.type; throw error;
       }
       const nextStatus = nextObjectStatus(body.eventType, object.level, object.status);
+      let parentObject=null;
+      if(body.eventType==="PACKING"){
+        const parent=await client.query("SELECT * FROM serialized_objects WHERE tenant_id=$1 AND code=$2 FOR UPDATE",[request.principal.tenantId,body.parentObjectCode]);
+        if(!parent.rowCount){const error=new Error("Parent object not found");error.statusCode=404;error.code="OBJECT_NOT_FOUND";throw error;}
+        parentObject=parent.rows[0];const ranks={ITEM:1,CASE:2,PALLET:3};
+        if(ranks[parentObject.level]<=ranks[object.level]||parentObject.status==="DESTROYED"){const error=new Error("Invalid packaging parent");error.statusCode=409;error.code="INVALID_PACKAGING_PARENT";throw error;}
+        if(parentObject.current_organization_id&&parentObject.current_organization_id!==request.principal.organizationId){const error=new Error("Packaging parent is held by another organization");error.statusCode=404;error.code="OBJECT_NOT_FOUND";throw error;}
+        if(object.parent_id){const error=new Error("Object is already packed");error.statusCode=409;error.code="OBJECT_ALREADY_PACKED";throw error;}
+      }
       const event = await client.query(
-        `INSERT INTO trace_events(tenant_id,event_type,object_id,shipment_id,actor_id,actor_role,organization_id,event_time,read_point,verification_status,metadata,idempotency_key)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
-        [request.principal.tenantId,body.eventType,object.id,body.shipmentId||null,request.principal.id,request.principal.role,request.principal.organizationId,body.eventTime,body.readPoint,verification.status,body.metadata,key]
+        `INSERT INTO trace_events(tenant_id,event_type,object_id,shipment_id,business_document_id,actor_id,actor_role,organization_id,event_time,read_point,verification_status,metadata,idempotency_key)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+        [request.principal.tenantId,body.eventType,object.id,body.shipmentId||null,body.documentId||null,request.principal.id,request.principal.role,request.principal.organizationId,body.eventTime,body.readPoint,verification.status,body.metadata,key]
       );
       await client.query(
         `INSERT INTO event_outbox(tenant_id,aggregate_type,aggregate_id,event_type,payload)
@@ -648,7 +668,14 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
         [request.principal.tenantId,object.id,{ event:event.rows[0], object:{ id:object.id, code:object.code, level:object.level, productId:object.product_id } }]
       );
       if (body.eventType !== "VERIFY" && verification.status === "VERIFIED") {
-        await client.query("UPDATE serialized_objects SET status=$1,current_organization_id=$2 WHERE id=$3", [nextStatus, request.principal.organizationId, object.id]);
+        const parentId=body.eventType==="PACKING"?parentObject.id:body.eventType==="UNPACKING"?null:object.parent_id;
+        await client.query("UPDATE serialized_objects SET status=$1,current_organization_id=$2,parent_id=$3 WHERE tenant_id=$4 AND id=$5", [nextStatus, request.principal.organizationId,parentId,request.principal.tenantId,object.id]);
+        if(body.eventType==="PACKING"||body.eventType==="UNPACKING"){
+          const relationshipParent=body.eventType==="PACKING"?parentObject.id:object.parent_id;
+          if(!relationshipParent){const error=new Error("Object is not currently packed");error.statusCode=409;error.code="OBJECT_NOT_PACKED";throw error;}
+          await client.query(`INSERT INTO package_relationship_events(tenant_id,parent_object_id,child_object_id,action,business_document_id,trace_event_id,actor_id,occurred_at)
+           VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[request.principal.tenantId,relationshipParent,object.id,body.eventType==="PACKING"?"ADD":"DELETE",body.documentId,event.rows[0].id,request.principal.id,body.eventTime]);
+        }
       }
       let riskCase = null;
       if (verification.risk) {

@@ -1,7 +1,12 @@
 export const eventCapability = {
   PACKING: "events:write:packing",
+  UNPACKING: "events:write:unpacking",
+  SHIPPING: "events:write:shipping",
   RECEIVING_DISTRIBUTOR: "events:write:distributor_receiving",
-  RECEIVING_STORE: "events:write:store_receiving"
+  RECEIVING_STORE: "events:write:store_receiving",
+  RETURNING: "events:write:returning",
+  SELLING: "events:write:selling",
+  DESTROYING: "events:write:destroying"
 };
 
 const transitions = {
@@ -21,6 +26,11 @@ const transitions = {
     ITEM: { RECEIVED: "RETURNED", SOLD: "RETURNED" }, CASE: { RECEIVED: "RETURNED" }, PALLET: { RECEIVED: "RETURNED" }
   },
   SELLING: { ITEM: { RECEIVED: "SOLD" } },
+  DESTROYING: {
+    ITEM: { COMMISSIONED:"DESTROYED",PACKED:"DESTROYED",RECEIVED:"DESTROYED",RETURNED:"DESTROYED" },
+    CASE: { COMMISSIONED:"DESTROYED",PACKED:"DESTROYED",RECEIVED:"DESTROYED",RETURNED:"DESTROYED" },
+    PALLET: { COMMISSIONED:"DESTROYED",PACKED:"DESTROYED",RECEIVED:"DESTROYED",RETURNED:"DESTROYED" }
+  },
   VERIFY: {}
 };
 
