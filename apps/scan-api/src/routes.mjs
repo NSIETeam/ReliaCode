@@ -619,6 +619,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       await lockIdempotencyKey(client, request.principal.tenantId, key);
       const cached = await getIdempotentResponse(client, request.principal.tenantId, key, hash);
       if (cached) return cached;
+      const device=body.eventType==="VERIFY"?{deviceId:null,locationId:null,readPoint:body.readPoint}:await authorizeOperationalDevice(client,config,request,body.eventType,{fallbackReadPoint:body.readPoint});
       const found = await client.query(
         `SELECT so.*,p.sku,p.gtin,p.name product_name FROM serialized_objects so JOIN products p ON p.id=so.product_id
          WHERE so.tenant_id=$1 AND so.code=$2 FOR UPDATE OF so`,
@@ -636,6 +637,8 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
         const receiving=body.eventType.startsWith("RECEIVING_");
         const authorizedOrganization=receiving?businessDocument.to_organization_id:businessDocument.from_organization_id;
         if(authorizedOrganization&&authorizedOrganization!==request.principal.organizationId){const error=new Error("Business document does not authorize this organization");error.statusCode=404;error.code="DOCUMENT_NOT_FOUND";throw error;}
+        const documentObject=await client.query("SELECT expected,object_snapshot FROM business_document_objects WHERE tenant_id=$1 AND document_id=$2 AND object_id=$3",[request.principal.tenantId,body.documentId,object.id]);
+        if(!documentObject.rowCount||!documentObject.rows[0].expected){const error=new Error("The serialized object is not expected on this business document");error.statusCode=409;error.code="OBJECT_NOT_ON_DOCUMENT";throw error;}
       }
       let shipment = null;
       if (body.shipmentId) {
@@ -651,6 +654,8 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
         const error = new Error(`Event rejected: ${verification.risk.type}`); error.statusCode=409; error.code=verification.risk.type; throw error;
       }
       const nextStatus = nextObjectStatus(body.eventType, object.level, object.status);
+      const stateApplied = body.eventType !== "VERIFY" && verification.status === "VERIFIED";
+      const effectiveStatus = stateApplied ? nextStatus : object.status;
       let parentObject=null;
       if(body.eventType==="PACKING"){
         const parent=await client.query("SELECT * FROM serialized_objects WHERE tenant_id=$1 AND code=$2 FOR UPDATE",[request.principal.tenantId,body.parentObjectCode]);
@@ -670,7 +675,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
          VALUES($1,'SERIALIZED_OBJECT',$2,'TRACE_EVENT_CAPTURED',$3)`,
         [request.principal.tenantId,object.id,{ event:event.rows[0], object:{ id:object.id, code:object.code, level:object.level, productId:object.product_id } }]
       );
-      if (body.eventType !== "VERIFY" && verification.status === "VERIFIED") {
+      if (stateApplied) {
         const parentId=body.eventType==="PACKING"?parentObject.id:body.eventType==="UNPACKING"?null:object.parent_id;
         await client.query("UPDATE serialized_objects SET status=$1,current_organization_id=$2,parent_id=$3 WHERE tenant_id=$4 AND id=$5", [nextStatus, request.principal.organizationId,parentId,request.principal.tenantId,object.id]);
         if(body.eventType==="PACKING"||body.eventType==="UNPACKING"){
@@ -680,7 +685,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
            VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[request.principal.tenantId,relationshipParent,object.id,body.eventType==="PACKING"?"ADD":"DELETE",body.documentId,event.rows[0].id,request.principal.id,body.eventTime]);
         }
       }
-      if(body.eventType!=="VERIFY")await enqueueWebhookDeliveries(client,request.principal.tenantId,body.eventType,{eventId:event.rows[0].id,eventType:body.eventType,eventTime:body.eventTime,object:{code:object.code,level:object.level,status:nextStatus},verificationStatus:verification.status});
+      if(body.eventType!=="VERIFY")await enqueueWebhookDeliveries(client,request.principal.tenantId,body.eventType,{eventId:event.rows[0].id,eventType:body.eventType,eventTime:body.eventTime,object:{code:object.code,level:object.level,status:effectiveStatus},verificationStatus:verification.status});
       let riskCase = null;
       if (verification.risk) {
         const risk = await client.query(
@@ -701,7 +706,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
           riskCase = conflict.rows[0];
         }
       }
-      const result = { event:event.rows[0], object:{...object,status:nextStatus}, riskCase, reward };
+      const result = { event:event.rows[0], object:{...object,status:effectiveStatus}, stateApplied, riskCase, reward };
       await audit(client, request, operation, "TRACE_EVENT", event.rows[0].id, null, result);
       await saveIdempotentResponse(client,{tenantId:request.principal.tenantId,key,operation,hash,status:201,body:result});
       return { status:201, body:result };
