@@ -15,6 +15,7 @@ import { observeHttpRequest, renderMetrics } from "./metrics.mjs";
 import { rotateLocalSession } from "./session-security.mjs";
 import { registerRecoveryRoutes } from "./recovery-routes.mjs";
 import { registerManualRecoveryRoutes } from "./manual-recovery-routes.mjs";
+import { runWithDatabaseContext,useTenantDatabaseContext,useSystemDatabaseContext } from "./database-context.mjs";
 
 export async function buildApp({ config, db }) {
   const app = Fastify({
@@ -41,6 +42,8 @@ export async function buildApp({ config, db }) {
   });
   await app.register(rateLimit, { max: 300, timeWindow: "1 minute", ban: 3, keyGenerator: (request) => request.ip });
 
+  app.addHook("onRequest",(_request,_reply,done)=>runWithDatabaseContext(done));
+
   const authenticate = await createAuthenticator({ ...config, db });
   const loginAttempts = new Map();
   if (config.NODE_ENV === "production" && config.AUTH_MODE === "local" && !config.SESSION_COOKIE_SECURE) app.log.warn("INSECURE HTTP session cookies are enabled; use HTTPS as soon as possible");
@@ -57,6 +60,7 @@ export async function buildApp({ config, db }) {
       request.log.warn({ error: error.message }, "authentication failed");
     }
     if (!request.principal) return reply.code(401).send({ code:"UNAUTHORIZED", message:"A valid access token is required", requestId:request.id });
+    if(request.principal.role==="PLATFORM_OPERATOR")useSystemDatabaseContext();else useTenantDatabaseContext(request.principal.tenantId);
     if (config.AUTH_MODE === "local") {
       if (["POST", "PUT", "PATCH", "DELETE"].includes(request.method)) {
         const origin = request.headers.origin;
@@ -96,12 +100,14 @@ export async function buildApp({ config, db }) {
   app.get("/health/ready", async (_request, reply) => {
     try {
       const migration = await db.query(
-        "SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1) AS current",
+        `SELECT EXISTS(SELECT 1 FROM schema_migrations WHERE version=$1) AS current,
+          r.rolsuper,r.rolbypassrls FROM pg_roles r WHERE r.rolname=current_user`,
         [REQUIRED_SCHEMA_VERSION]
       );
       if (!migration.rows[0]?.current) {
         return reply.code(503).send({ status:"not_ready", reason:"schema_outdated" });
       }
+      if(migration.rows[0].rolsuper||migration.rows[0].rolbypassrls)return reply.code(503).send({status:"not_ready",reason:"database_role_bypasses_rls"});
       return { status:"ready", schemaVersion:REQUIRED_SCHEMA_VERSION };
     }
     catch { return reply.code(503).send({ status:"not_ready" }); }

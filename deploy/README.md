@@ -22,7 +22,9 @@
 - Variable `DEPLOY_PORT`：SSH 端口，默认 `22`。
 - Variable `DEPLOY_PATH`：部署目录，默认 `/opt/reliacode/deploy`。
 
-服务器上的 `DEPLOY_PATH` 必须预先保存不入库的 `.env`、`secrets/database_url.txt`、`secrets/object_storage_access_key_id.txt`、`secrets/object_storage_secret_access_key.txt` 和 `secrets/smtp_url.txt`。SMTP URL 应包含受限的事务邮件账号凭据。工作流只覆盖 `compose.production.yaml` 与 `release.sh`，不会覆盖生产密钥。对象存储凭据应限制为导出 bucket 的读写权限，不得授予账户级管理权限。建议给 `production` Environment 配置 required reviewers，使自动任务在真正更新服务器前等待人工批准。
+服务器上的 `DEPLOY_PATH` 必须预先保存不入库的 `.env`、`secrets/database_url.txt`、`secrets/migration_database_url.txt`、`secrets/object_storage_access_key_id.txt`、`secrets/object_storage_secret_access_key.txt` 和 `secrets/smtp_url.txt`。SMTP URL 应包含受限的事务邮件账号凭据。工作流只覆盖 `compose.production.yaml` 与 `release.sh`，不会覆盖生产密钥。对象存储凭据应限制为导出 bucket 的读写权限，不得授予账户级管理权限。建议给 `production` Environment 配置 required reviewers，使自动任务在真正更新服务器前等待人工批准。
+
+`database_url.txt` 必须使用专用的非超级用户、无 `BYPASSRLS` 权限的应用数据库角色；`migration_database_url.txt` 使用独立受控的 schema owner，只提供给一次性迁移容器。API 就绪检查会拒绝可绕过 RLS 的连接角色。每个租户请求都在事务内设置数据库租户上下文，后台 worker、登录恢复、公开投影和平台控制面通过显式系统上下文运行。
 
 `SESSION_FINGERPRINT_KEY` 与 `WEBHOOK_ENCRYPTION_KEY` 都必须使用独立随机 32 字节 base64url 值，禁止复用。前者用于不可逆会话网络指纹，轮换它会降低历史异常登录关联能力；后者用于解密现有 Webhook 签名密钥，轮换前必须执行端点密钥迁移。
 

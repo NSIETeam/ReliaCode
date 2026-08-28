@@ -38,6 +38,7 @@ jobs:
         run: |
           npm run migrate --workspace @reliacode/scan-api
           npm run migrate --workspace @reliacode/scan-api
+          node apps/scan-api/tests/rls.integration.mjs
       - run: npm audit --workspace @reliacode/scan-api --omit=dev --audit-level=high
 
   web-browser:

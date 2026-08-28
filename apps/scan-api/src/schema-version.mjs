@@ -1,1 +1,1 @@
-export const REQUIRED_SCHEMA_VERSION = "016_manual_account_recovery.sql";
+export const REQUIRED_SCHEMA_VERSION = "017_tenant_rls.sql";

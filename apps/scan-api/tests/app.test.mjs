@@ -23,7 +23,7 @@ test("health endpoints do not require authentication", async (t) => {
   const ready = await app.inject({ method:"GET", url:"/health/ready" });
   assert.equal(live.statusCode, 200);
   assert.equal(ready.statusCode, 200);
-  assert.equal(ready.json().schemaVersion, "016_manual_account_recovery.sql");
+  assert.equal(ready.json().schemaVersion, "017_tenant_rls.sql");
 });
 
 test("readiness fails when the database schema is outdated", async (t) => {
@@ -34,6 +34,8 @@ test("readiness fails when the database schema is outdated", async (t) => {
   assert.equal(response.statusCode,503);
   assert.equal(response.json().reason,"schema_outdated");
 });
+
+test("readiness rejects a database login that can bypass tenant RLS",async t=>{const unsafeDb={query:async()=>({rowCount:1,rows:[{current:true,rolsuper:true,rolbypassrls:false}]})};const app=await buildApp({config,db:unsafeDb});t.after(()=>app.close());const response=await app.inject({method:"GET",url:"/health/ready"});assert.equal(response.statusCode,503);assert.equal(response.json().reason,"database_role_bypasses_rls");});
 
 test("business routes reject anonymous requests", async (t) => {
   const app = await buildApp({ config, db });

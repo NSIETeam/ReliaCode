@@ -6,18 +6,20 @@ import { loadConfig } from "../src/config.mjs";
 import { traceEventSchema } from "../src/schemas.mjs";
 import { nextObjectStatus } from "../src/domain.mjs";
 import { changeMemberAccountStatus } from "../src/routes.mjs";
+import { currentDatabaseContext } from "../src/database-context.mjs";
 
 const config=loadConfig({NODE_ENV:"test",DATABASE_URL:"postgres://unused",AUTH_MODE:"development",LOG_LEVEL:"silent"});
 const principal={sub:"operator-1",tenant_id:"11111111-1111-4111-8111-111111111111",organization_id:"22222222-2222-4222-8222-222222222222",role:"BRAND_ADMIN"};
 const headers={"x-reliacode-principal":JSON.stringify(principal)};
 
 test("normalized product listing always binds the authenticated tenant",async(t)=>{
-  const calls=[];const db={query:async(sql,params=[])=>{calls.push({sql,params});if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};if(sql.includes("FROM products WHERE tenant_id=$1"))return{rowCount:0,rows:[]};throw new Error(`Unexpected SQL: ${sql}`);}};
+  const calls=[];const db={query:async(sql,params=[])=>{calls.push({sql,params,context:{...currentDatabaseContext()}});if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};if(sql.includes("FROM products WHERE tenant_id=$1"))return{rowCount:0,rows:[]};throw new Error(`Unexpected SQL: ${sql}`);}};
   const app=await buildApp({config,db});t.after(()=>app.close());
   const response=await app.inject({method:"GET",url:"/api/v1/products",headers});
   assert.equal(response.statusCode,200);
   const query=calls.find(call=>call.sql.includes("FROM products WHERE tenant_id=$1"));
   assert.equal(query.params[0],principal.tenant_id);
+  assert.deepEqual(query.context,{mode:"tenant",tenantId:principal.tenant_id});
 });
 
 test("code job listing is tenant-scoped, paginated, and never selects object keys",async(t)=>{const calls=[],db={query:async(sql,params=[])=>{calls.push({sql,params});if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};if(sql.includes("FROM code_generation_jobs WHERE tenant_id=$1"))return{rowCount:1,rows:[{id:"33333333-3333-4333-8333-333333333333",created_at:"2026-08-28T00:00:00Z",export_status:"COMPLETED"}]};throw new Error(`Unexpected SQL: ${sql}`);}};const app=await buildApp({config,db});t.after(()=>app.close());const response=await app.inject({method:"GET",url:"/api/v1/code-jobs?limit=20",headers});assert.equal(response.statusCode,200);assert.equal(response.json().items[0].output_object_key,undefined);const query=calls.find(call=>call.sql.includes("FROM code_generation_jobs WHERE tenant_id=$1"));assert.doesNotMatch(query.sql,/output_object_key/);assert.equal(query.params[0],principal.tenant_id);assert.equal(query.params[3],21);});

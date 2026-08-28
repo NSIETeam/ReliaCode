@@ -1,4 +1,5 @@
 import pg from "pg";
+import { configureDatabaseClient } from "./database-context.mjs";
 
 const { Pool } = pg;
 
@@ -14,11 +15,17 @@ export function createDatabase(config) {
   pool.on("error", (error) => console.error(JSON.stringify({ level: "error", message: "postgres pool error", error: error.message })));
   return {
     pool,
-    query: (text, params) => pool.query(text, params),
+    async query(text,params) {
+      const client=await pool.connect();
+      try { await client.query("BEGIN");await configureDatabaseClient(client);const result=await client.query(text,params);await client.query("COMMIT");return result; }
+      catch(error){await client.query("ROLLBACK");throw error;}
+      finally{client.release();}
+    },
     async transaction(work) {
       const client = await pool.connect();
       try {
         await client.query("BEGIN");
+        await configureDatabaseClient(client);
         const result = await work(client);
         await client.query("COMMIT");
         return result;

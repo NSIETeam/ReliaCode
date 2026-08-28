@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.mjs";
 import { createDatabase } from "./db.mjs";
 
-const config = loadConfig();
+const config = loadConfig(process.env.MIGRATION_DATABASE_URL_FILE?{...process.env,DATABASE_URL:undefined,DATABASE_URL_FILE:process.env.MIGRATION_DATABASE_URL_FILE}:process.env);
 const db = createDatabase(config);
 const migrationDir = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
 let client;
