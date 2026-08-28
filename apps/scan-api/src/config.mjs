@@ -36,6 +36,7 @@ const schema = z.object({
   WEBAUTHN_RP_NAME: z.string().min(1).max(100).default("ReliaCode"),
   WEBAUTHN_RP_ID: z.string().min(1).optional(),
   WEBAUTHN_ORIGIN: z.string().url().optional(),
+  METRICS_BEARER_TOKEN: z.string().min(32).optional(),
   APP_VERSION: z.string().min(1).max(100).default("development"),
   GIT_SHA: z.string().min(1).max(100).default("unknown")
 });

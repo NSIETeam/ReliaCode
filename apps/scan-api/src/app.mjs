@@ -9,6 +9,7 @@ import { registerRoutes } from "./routes.mjs";
 import { registerSaasRoutes } from "./saas-routes.mjs";
 import { registerPasskeyRoutes } from "./passkey-routes.mjs";
 import { REQUIRED_SCHEMA_VERSION } from "./schema-version.mjs";
+import { observeHttpRequest, renderMetrics } from "./metrics.mjs";
 
 export async function buildApp({ config, db }) {
   const app = Fastify({
@@ -44,7 +45,7 @@ export async function buildApp({ config, db }) {
     const passwordReset = pathname === "/api/auth/password-reset/request" || pathname === "/api/auth/password-reset/confirm";
     const hasAuthCredentials = Boolean(request.headers.authorization || request.headers.cookie);
     const passkeyLogin = pathname === "/api/auth/passkeys/authentication/options" || pathname === "/api/auth/passkeys/authentication/verify";
-    if (request.url === "/health/live" || request.url === "/health/ready" || request.url.startsWith("/api/public/") || request.url === "/api/auth/login" || request.url === "/api/auth/register" || pathname === "/api/v1/tenant-applications" || passkeyLogin || passwordReset || (invitationAccept && !hasAuthCredentials)) return;
+    if (request.url === "/health/live" || request.url === "/health/ready" || pathname === "/metrics" || request.url.startsWith("/api/public/") || request.url === "/api/auth/login" || request.url === "/api/auth/register" || pathname === "/api/v1/tenant-applications" || passkeyLogin || passwordReset || (invitationAccept && !hasAuthCredentials)) return;
     try { request.principal = await authenticate(request); } catch (error) {
       request.log.warn({ error: error.message }, "authentication failed");
     }
@@ -76,6 +77,7 @@ export async function buildApp({ config, db }) {
     reply.header("cache-control", request.url.startsWith("/api/public/") ? "public, max-age=60, stale-while-revalidate=300" : request.method === "GET" ? "private, no-store" : "no-store");
     return payload;
   });
+  app.addHook("onResponse",async(request,reply)=>{observeHttpRequest(request.method,request.routeOptions?.url||"unmatched",reply.statusCode,reply.elapsedTime/1000);});
 
   app.get("/health/live", async () => ({
     status:"ok",
@@ -96,6 +98,7 @@ export async function buildApp({ config, db }) {
     }
     catch { return reply.code(503).send({ status:"not_ready" }); }
   });
+  app.get("/metrics",async(request,reply)=>{if(!config.METRICS_BEARER_TOKEN||request.headers.authorization!==`Bearer ${config.METRICS_BEARER_TOKEN}`)return reply.code(404).send({code:"NOT_FOUND",message:"Route not found"});reply.type("text/plain; version=0.0.4; charset=utf-8");return renderMetrics(db);});
   registerRoutes(app, { db, config, loginAttempts });
   registerSaasRoutes(app, { db, config });
   registerPasskeyRoutes(app, { db, config });

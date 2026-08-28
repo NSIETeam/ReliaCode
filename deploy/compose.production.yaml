@@ -19,6 +19,7 @@ services:
       WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-ReliaCode}
       WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?WEBAUTHN_RP_ID is required}
       WEBAUTHN_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
+      METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN:?METRICS_BEARER_TOKEN is required}
     secrets: [database_url]
     restart: "no"
 

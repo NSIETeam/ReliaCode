@@ -290,6 +290,31 @@ CREATE TABLE IF NOT EXISTS platform_idempotency_records (
   expires_at timestamptz NOT NULL
 );
 
+ALTER TABLE event_outbox ADD COLUMN IF NOT EXISTS dead_lettered_at timestamptz;
+CREATE INDEX IF NOT EXISTS event_outbox_dead_letter_idx ON event_outbox(tenant_id,dead_lettered_at DESC) WHERE dead_lettered_at IS NOT NULL AND processed_at IS NULL;
+CREATE TABLE IF NOT EXISTS epcis_replay_requests (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  tenant_id uuid NOT NULL REFERENCES tenants(id),
+  outbox_id uuid NOT NULL REFERENCES event_outbox(id),
+  status text NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING','APPROVED','REJECTED')),
+  reason text NOT NULL,
+  requested_by text NOT NULL,
+  reviewed_by text,
+  review_reason text,
+  reviewed_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now()
+);
+CREATE UNIQUE INDEX IF NOT EXISTS epcis_replay_requests_pending_uq ON epcis_replay_requests(outbox_id) WHERE status='PENDING';
+
+CREATE TABLE IF NOT EXISTS backup_runs (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  object_key text NOT NULL,
+  checksum_sha256 text NOT NULL,
+  size_bytes bigint NOT NULL CHECK (size_bytes>0),
+  status text NOT NULL CHECK (status IN ('COMPLETED','VERIFIED','RESTORED')),
+  completed_at timestamptz NOT NULL DEFAULT now()
+);
+
 ALTER TABLE local_memberships DROP CONSTRAINT IF EXISTS local_memberships_role_check;
 ALTER TABLE local_memberships ADD CONSTRAINT local_memberships_role_check CHECK (role IN (
   'PLATFORM_OPERATOR','TENANT_OWNER','BRAND_ADMIN','BRAND_AUDITOR','FACTORY_OPERATOR',

@@ -37,6 +37,12 @@ docker compose --env-file .env -f compose.production.yaml up -d api outbox-worke
 
 迁移器使用 PostgreSQL advisory lock，重复执行安全；API 的 `/health/ready` 只有在数据库包含当前要求的迁移版本时才返回 200。
 
+## 异地备份与恢复演练
+
+生产主机每天通过系统定时器运行 `backup-postgres.sh`。脚本先使用 `pg_dump` 生成一致性归档，再用 age 公钥加密，最后上传 S3 兼容对象存储并记录校验和；`reliacode_backup_age_seconds` 超过 86400 必须告警。解密私钥不能放在生产主机。
+
+每月在隔离的 `reliacode_drill` 数据库执行 `restore-drill.sh`。脚本会拒绝名称不含 `reliacode_drill` 的目标连接串，避免误覆盖生产库。恢复成功后仍须执行真实抽样查询并记录演练签字。
+
 ## 上线验证
 
 ```powershell
