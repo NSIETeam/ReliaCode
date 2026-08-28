@@ -55,3 +55,11 @@ test("a field operator can list tenant documents needed for online work",async t
   const query=db.calls.find(call=>call.sql.includes("FROM business_documents")&&call.sql.includes("ORDER BY created_at"));
   assert.deepEqual(query.params,[ids.tenant]);
 });
+
+test("organization directory and event center remain tenant scoped",async t=>{
+  const db=database(),app=await buildApp({config,db});t.after(()=>app.close());
+  const organizations=await app.inject({method:"GET",url:"/api/v1/organizations",headers});assert.equal(organizations.statusCode,200,organizations.body);
+  const events=await app.inject({method:"GET",url:`/api/v1/trace-events?eventType=PACKING&objectCode=object-000001&documentId=${ids.document}&limit=25`,headers});assert.equal(events.statusCode,200,events.body);
+  const organizationQuery=db.calls.find(call=>call.sql.includes("FROM organizations")&&call.sql.includes("ORDER BY name"));assert.deepEqual(organizationQuery.params,[ids.tenant]);
+  const eventQuery=db.calls.find(call=>call.sql.includes("FROM trace_events te"));assert.deepEqual(eventQuery.params.slice(0,4),[ids.tenant,"PACKING","OBJECT-000001",ids.document]);assert.equal(eventQuery.params[6],26);
+});

@@ -10,8 +10,9 @@
     "test:mobile": "node tests/mobile-and-edge.mjs",
     "test:agent": "node tests/agent.mjs",
     "test:domain-api": "node tests/domain-api.e2e.mjs",
+    "test:documents": "node tests/document-console.e2e.mjs",
     "test:persistence": "node tests/persistence.test.mjs",
-    "test": "npm run test:persistence && npm run test:e2e && npm run test:mobile && npm run test:agent && npm run test:domain-api"
+    "test": "npm run test:persistence && npm run test:e2e && npm run test:mobile && npm run test:agent && npm run test:domain-api && npm run test:documents"
   },
   "devDependencies": {
     "jsqr": "^1.4.0",

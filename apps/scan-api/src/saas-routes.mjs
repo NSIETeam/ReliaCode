@@ -185,6 +185,10 @@ export function registerSaasRoutes(app, { db,config }) {
     const result=await db.query("SELECT * FROM locations WHERE tenant_id=$1 ORDER BY created_at DESC",[request.principal.tenantId]);
     return {items:result.rows};
   });
+  app.get("/api/v1/organizations",async(request)=>{
+    requireAnyCapability(request.principal,["documents:write","members:read","events:read"]);
+    const result=await db.query("SELECT id,name,type,status,created_at FROM organizations WHERE tenant_id=$1 ORDER BY name,id",[request.principal.tenantId]);return{items:result.rows};
+  });
   app.post("/api/v1/locations", async(request,reply)=>{
     requireCapability(request.principal,"locations:write");
     const body=z.object({ organizationId:uuid,code:z.string().trim().min(1).max(80),gln:z.string().refine(isValidGln,"GLN must be a valid 13 digit GS1 key including its check digit").optional(),name:z.string().trim().min(1).max(160),type:z.enum(["FACTORY","WAREHOUSE","DISTRIBUTOR","STORE","OFFICE"]),city:z.string().max(80).optional(),region:z.string().max(80).optional(),auditReason:reason }).parse(request.body);
@@ -207,6 +211,15 @@ export function registerSaasRoutes(app, { db,config }) {
   });
 
   app.get("/api/v1/documents",async(request)=>{requireAnyCapability(request.principal,["events:read","events:write:packing","events:write:unpacking","events:write:shipping","events:write:distributor_receiving","events:write:store_receiving","events:write:returning","events:write:selling","events:write:destroying"]);const result=await db.query("SELECT * FROM business_documents WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200",[request.principal.tenantId]);return{items:result.rows};});
+  app.get("/api/v1/trace-events",async(request)=>{
+    requireCapability(request.principal,"events:read");const query=pageQuery.extend({eventType:deviceEventType.or(z.literal("VERIFY")).optional(),objectCode:z.string().trim().min(6).max(200).transform(value=>value.toUpperCase()).optional(),documentId:uuid.optional()}).parse(request.query),cursor=cursorDecode(query.cursor);
+    const result=await db.query(`SELECT te.id,te.event_type,te.event_time,te.record_time,te.read_point,te.verification_status,te.organization_id,te.device_id,te.location_id,te.business_document_id,
+      so.code object_code,so.level object_level,p.sku,p.name product_name
+      FROM trace_events te JOIN serialized_objects so ON so.tenant_id=te.tenant_id AND so.id=te.object_id JOIN products p ON p.tenant_id=so.tenant_id AND p.id=so.product_id
+      WHERE te.tenant_id=$1 AND ($2::text IS NULL OR te.event_type=$2) AND ($3::text IS NULL OR so.code=$3) AND ($4::uuid IS NULL OR te.business_document_id=$4)
+        AND ($5::timestamptz IS NULL OR (te.record_time,te.id)<($5,$6::uuid)) ORDER BY te.record_time DESC,te.id DESC LIMIT $7`,[request.principal.tenantId,query.eventType||null,query.objectCode||null,query.documentId||null,cursor?.[0]||null,cursor?.[1]||null,query.limit+1]);
+    const hasMore=result.rows.length>query.limit,items=hasMore?result.rows.slice(0,query.limit):result.rows,nextCursor=hasMore?Buffer.from(JSON.stringify([items.at(-1).record_time,items.at(-1).id])).toString("base64url"):null;return{items,nextCursor};
+  });
   app.post("/api/v1/documents",async(request,reply)=>{
     requireCapability(request.principal,"documents:write");const body=z.object({documentType:z.enum(["PRODUCTION_ORDER","PACKING_ORDER","SHIPMENT","RECEIPT","SALE","RETURN","DESTRUCTION"]),reference:z.string().trim().min(1).max(120),fromOrganizationId:uuid.optional(),toOrganizationId:uuid.optional(),metadata:z.record(z.string(),z.unknown()).default({}),auditReason:reason}).superRefine((value,ctx)=>{if(["PRODUCTION_ORDER","PACKING_ORDER","SHIPMENT","SALE","RETURN","DESTRUCTION"].includes(value.documentType)&&!value.fromOrganizationId)ctx.addIssue({code:"custom",path:["fromOrganizationId"],message:"Source organization is required"});if(["SHIPMENT","RECEIPT"].includes(value.documentType)&&!value.toOrganizationId)ctx.addIssue({code:"custom",path:["toOrganizationId"],message:"Destination organization is required"});}).parse(request.body);
     const response=await command(db,request,"DOCUMENT_CREATE",body,async(client)=>{for(const orgId of [body.fromOrganizationId,body.toOrganizationId].filter(Boolean)){const org=await client.query("SELECT 1 FROM organizations WHERE tenant_id=$1 AND id=$2",[request.principal.tenantId,orgId]);if(!org.rowCount)notFound("Organization not found");}const created=await client.query(`INSERT INTO business_documents(tenant_id,document_type,reference,from_organization_id,to_organization_id,metadata,created_by) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING *`,[request.principal.tenantId,body.documentType,body.reference,body.fromOrganizationId||null,body.toOrganizationId||null,body.metadata,request.principal.id]);await tenantAudit(client,request,"DOCUMENT_CREATE","BUSINESS_DOCUMENT",created.rows[0].id,null,created.rows[0]);return{status:201,value:created.rows[0]};});return reply.code(response.status).send(response.body);

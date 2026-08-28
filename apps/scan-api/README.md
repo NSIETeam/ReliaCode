@@ -26,6 +26,8 @@ npm start
 
 单据明细以 `ACTION` 和 `CONTEXT` 区分待执行对象与仅用于授权/证明包装关系的对象。审批至少要求一条预期 `ACTION` 行；已验证的状态事件原子写回 `fulfilled_event_id/fulfilled_at`，并在首条履约时把 `APPROVED` 单据推进到 `IN_PROGRESS`。同一动作行不能重复消费，任何预期动作行尚未履约时禁止将单据标记为 `COMPLETED`。包装父箱通常应录为 `CONTEXT`，子件或本次箱级动作的根对象录为 `ACTION`。
 
+管理工作台通过 `GET /api/v1/organizations` 获取当前租户的最小组织目录，不接受客户端自造组织名称。事件中心使用 `GET /api/v1/trace-events`，支持事件类型、对象编码、单据 ID 筛选及 `(record_time,id)` 不透明游标；查询和游标边界始终绑定认证租户，单页最多 200 条，不通过浏览器下载整表。
+
 对 CASE/PALLET 执行发货、收货、退货或销毁时，API 使用递归查询在同一事务中锁定当前包装树，逐个验证子件状态迁移并原子更新全部子件。每次事件都会写入追加式 `trace_event_object_snapshots`，保存当时每个对象的层级、直接父对象、原状态、结果状态和最小对象快照；因此后续拆箱、换箱不会改写历史事件看到的包装关系。任何一个子件不能完成迁移时整次箱级动作失败，不产生部分流转。
 
 装箱和拆箱同时校验子件与父包装都列在同一已批准包装单据上，拆箱会在写事件前锁定并验证当前父对象。OpenEPCIS outbox 对这两类动作输出标准 `AggregationEvent`，分别使用 `ADD` 和 `DELETE`，明确保存 `parentID` 与 `childEPCs`；其他物流动作继续输出 `ObjectEvent`。

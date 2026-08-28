@@ -361,6 +361,7 @@ body[data-shell="mobile-field"] .field-context-panel { border-color:#b9ddd4; }
 .movement-row.table-head { border: 0; border-radius: 6px; }
 .movement-row time { color: var(--text-3); font-size: 11px; }
 .movement-row small { display: block; margin-top: 3px; color: var(--text-3); font-size: 10px; }
+#documents .movement-row { grid-template-columns: 32px minmax(0, 1fr) auto auto; }
 .event-type { display: flex; align-items: center; gap: 8px; font-weight: 600; }
 .event-type svg { width: 17px; height: 17px; color: var(--brand); }
 
@@ -459,6 +460,8 @@ body[data-shell="mobile-field"] .field-context-panel { border-color:#b9ddd4; }
   .brand-grid { grid-template-columns: 1fr; }
   .movement-row { grid-template-columns: 110px 130px 1fr 1fr; }
   .movement-row > :last-child { display: none; }
+  #documents .movement-row { grid-template-columns: 32px minmax(0, 1fr) auto auto; }
+  #documents .movement-row > :last-child { display: inline-flex; }
 }
 
 @media (max-width: 767px) {
@@ -508,6 +511,8 @@ body[data-shell="mobile-field"] .field-context-panel { border-color:#b9ddd4; }
   .rule-aside { display: none; }
   .movement-row { grid-template-columns: 92px minmax(0, 1fr); }
   .movement-row > :nth-child(2), .movement-row > :nth-child(4), .movement-row > :last-child { display: none; }
+  #documents .movement-row { grid-template-columns: 28px minmax(0, 1fr) auto auto; gap: 8px; }
+  #documents .movement-row > :nth-child(2), #documents .movement-row > :last-child { display: block; }
   .movement-row.table-head > :nth-child(3) { display: block; }
   .campaign-facts { grid-template-columns: repeat(2, 1fr); }
 }
