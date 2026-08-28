@@ -1,6 +1,7 @@
 import { loadConfig } from "./config.mjs";
 import { createDatabase } from "./db.mjs";
 import { toEpcisDocument } from "./epcis.mjs";
+import { captureEpcisDocument } from "./epcis-client.mjs";
 import { pathToFileURL } from "node:url";
 
 export async function claimOutboxEvent(db) {
@@ -22,13 +23,7 @@ export async function processOutboxEvent(db,config,row,{fetchImpl=fetch}={}) {
     return;
   }
   try {
-    const response = await fetchImpl(new URL("epcis/capture", `${config.OPEN_EPCIS_BASE_URL.replace(/\/$/, "")}/`), {
-      method:"POST",
-      headers:{ "content-type":"application/json", "x-reliacode-outbox-id":row.id },
-      body:JSON.stringify(document),
-      signal:AbortSignal.timeout(15_000)
-    });
-    if (!response.ok) throw new Error(`OpenEPCIS returned ${response.status}: ${(await response.text()).slice(0, 500)}`);
+    await captureEpcisDocument(config.OPEN_EPCIS_BASE_URL,document,{outboxId:row.id,fetchImpl});
     await db.query("UPDATE event_outbox SET processed_at=now(),locked_at=NULL,last_error=NULL WHERE id=$1", [row.id]);
   } catch (error) {
     await db.query(
