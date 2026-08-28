@@ -25,13 +25,16 @@ services:
       WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:?WEBHOOK_ENCRYPTION_KEY is required}
       SESSION_ROTATION_MINUTES: ${SESSION_ROTATION_MINUTES:-15}
       SESSION_FINGERPRINT_KEY: ${SESSION_FINGERPRINT_KEY:?SESSION_FINGERPRINT_KEY is required}
+      SMTP_URL_FILE: /run/secrets/smtp_url
+      EMAIL_FROM: ${EMAIL_FROM:?EMAIL_FROM is required}
+      ACCOUNT_RECOVERY_BASE_URL: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
       OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:?OBJECT_STORAGE_ENDPOINT is required}
       OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-auto}
       OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:?OBJECT_STORAGE_BUCKET is required}
       OBJECT_STORAGE_ACCESS_KEY_ID_FILE: /run/secrets/object_storage_access_key_id
       OBJECT_STORAGE_SECRET_ACCESS_KEY_FILE: /run/secrets/object_storage_secret_access_key
       OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-false}
-    secrets: &api_secrets [database_url, object_storage_access_key_id, object_storage_secret_access_key]
+    secrets: &api_secrets [database_url, object_storage_access_key_id, object_storage_secret_access_key, smtp_url]
     restart: "no"
 
   api:
@@ -118,3 +121,5 @@ secrets:
     file: ./secrets/object_storage_access_key_id.txt
   object_storage_secret_access_key:
     file: ./secrets/object_storage_secret_access_key.txt
+  smtp_url:
+    file: ./secrets/smtp_url.txt

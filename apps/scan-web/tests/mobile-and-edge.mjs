@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { addProduct, initialize, openApp } from "./helpers.mjs";
+import { addProduct, initialize, openApp, testBaseUrl } from "./helpers.mjs";
 
 const {browser,page}=await openApp({width:375,height:812});
 let overflow=await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth);
@@ -15,5 +15,7 @@ await page.locator("#verify-code").fill("<script>alert(1)</script>");
 await page.getByRole("button",{name:"验证产品"}).click();
 assert.match(await page.locator("#verify-result").innerText(),/未识别可靠码/);
 assert.equal(await page.locator("script").count(),scriptCount);
+let resetPayload;await page.route("**/api/auth/password-reset/confirm",async route=>{resetPayload=route.request().postDataJSON();await route.fulfill({status:200,contentType:"application/json",body:JSON.stringify({updated:true})});});
+const resetToken="a".repeat(43);await page.goto(`${testBaseUrl}/?resetToken=${resetToken}`,{waitUntil:"networkidle"});assert.equal(await page.getByRole("heading",{name:"设置新密码"}).isVisible(),true);await page.locator('#password-reset-confirm [name="password"]').fill("new-secure-password-123");await page.locator('#password-reset-confirm [name="confirmPassword"]').fill("new-secure-password-123");await page.getByRole("button",{name:"重置密码"}).click();await page.locator("#server-auth").waitFor();assert.deepEqual(resetPayload,{token:resetToken,newPassword:"new-secure-password-123"});assert.equal(new URL(page.url()).searchParams.has("resetToken"),false);
 await browser.close();
-console.log("MOBILE/EDGE PASS: first-run onboarding, 375/320 layout and hostile input escaping");
+console.log("MOBILE/EDGE PASS: first-run onboarding, 375/320 layout, hostile input escaping and recovery deep link");

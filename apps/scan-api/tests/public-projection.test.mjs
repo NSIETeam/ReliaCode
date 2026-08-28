@@ -65,7 +65,7 @@ test('workspace projection encodes event arrays as JSONB strings', async (t) => 
 });
 
 test('production insecure HTTP bootstrap does not emit HSTS', async (t) => {
-  const config=loadConfig({ NODE_ENV:'production', DATABASE_URL:'postgres://unused', AUTH_MODE:'local', ADMIN_PASSWORD_HASH:hashPassword('secret'), SESSION_COOKIE_SECURE:'false', ALLOW_INSECURE_HTTP:'true', CORS_ORIGINS:'http://8.140.52.117', SESSION_FINGERPRINT_KEY:Buffer.alloc(32,4).toString('base64url'), LOG_LEVEL:'silent' });
+  const config=loadConfig({ NODE_ENV:'production', DATABASE_URL:'postgres://unused', AUTH_MODE:'local', ADMIN_PASSWORD_HASH:hashPassword('secret'), SESSION_COOKIE_SECURE:'false', ALLOW_INSECURE_HTTP:'true', CORS_ORIGINS:'http://8.140.52.117', SESSION_FINGERPRINT_KEY:Buffer.alloc(32,4).toString('base64url'),SMTP_URL:'smtps://user:password@smtp.example.cn:465',EMAIL_FROM:'ReliaCode <no-reply@example.cn>',ACCOUNT_RECOVERY_BASE_URL:'http://8.140.52.117/', LOG_LEVEL:'silent' });
   const app=await buildApp({ config, db:{ query:async () => ({ rowCount:1, rows:[{ current:true }] }) } });
   t.after(() => app.close());
   const response=await app.inject({ method:'GET', url:'/health/live' });

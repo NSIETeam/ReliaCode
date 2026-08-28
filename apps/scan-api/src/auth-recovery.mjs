@@ -88,7 +88,7 @@ export function createAccountRecoveryService({
     const user = await store.findUserByEmail(normalizedEmail);
     // Keep the public reset endpoint enumeration-resistant: unknown addresses
     // have the same accepted response and no token is created.
-    if (!user || (purpose === ACCOUNT_TOKEN_PURPOSE.PASSWORD_RESET && !user.emailVerifiedAt)) return { accepted: true, delivered: false };
+    if (!user || (purpose === ACCOUNT_TOKEN_PURPOSE.PASSWORD_RESET && !user.emailVerifiedAt) || (purpose===ACCOUNT_TOKEN_PURPOSE.EMAIL_VERIFICATION&&user.emailVerifiedAt)) return { accepted: true, delivered: false };
     const now = asDate(clock(), "clock");
     const latest = await store.findLatestAccountToken(user.id, purpose);
     if (latest?.requestedAt) {

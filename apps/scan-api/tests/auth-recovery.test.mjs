@@ -72,6 +72,7 @@ test("reset token is single-use, expires, and updates with a password hash", asy
 
 test("email verification uses a distinct purpose and is single-use", async () => {
   const { service, state } = fixture();
+  state.users[0].emailVerifiedAt=null;
   const issued = await service.requestEmailVerification("owner@example.com");
   assert.equal(state.tokens[0].purpose, ACCOUNT_TOKEN_PURPOSE.EMAIL_VERIFICATION);
   assert.deepEqual(await service.confirmEmailVerification(issued.token), { userId: "user-1", verified: true });
@@ -80,7 +81,8 @@ test("email verification uses a distinct purpose and is single-use", async () =>
 });
 
 test("wrong token purpose cannot be used for reset", async () => {
-  const { service } = fixture();
+  const { service,state } = fixture();
+  state.users[0].emailVerifiedAt=null;
   const issued = await service.requestEmailVerification("owner@example.com");
   await assert.rejects(() => service.confirmPasswordReset(issued.token, "a sufficiently long password"), /invalid/);
 });

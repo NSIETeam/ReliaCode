@@ -33,6 +33,10 @@ const schema = z.object({
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
   SESSION_ROTATION_MINUTES: z.coerce.number().int().min(5).max(1440).default(15),
   SESSION_FINGERPRINT_KEY: z.string().min(43).optional(),
+  SMTP_URL: z.string().min(1).optional(),
+  SMTP_URL_FILE: z.string().min(1).optional(),
+  EMAIL_FROM: z.string().min(3).max(254).refine(value=>!/[\r\n]/.test(value)).optional(),
+  ACCOUNT_RECOVERY_BASE_URL: z.string().url().optional(),
   TRUST_PROXY: boolean.default(false),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   OPEN_EPCIS_BASE_URL: z.string().url().optional(),
@@ -85,6 +89,9 @@ export function loadConfig(env = process.env) {
   const objectStorageSecretAccessKey=config.OBJECT_STORAGE_SECRET_ACCESS_KEY||(config.OBJECT_STORAGE_SECRET_ACCESS_KEY_FILE?readFileSync(config.OBJECT_STORAGE_SECRET_ACCESS_KEY_FILE,"utf8").trim():"");
   const objectStorageValues=[config.OBJECT_STORAGE_ENDPOINT,config.OBJECT_STORAGE_BUCKET,objectStorageAccessKeyId,objectStorageSecretAccessKey];
   if(objectStorageValues.some(Boolean)&&!objectStorageValues.every(Boolean))throw new Error("Object storage endpoint, bucket, access key, and secret key must be configured together");
+  const smtpUrl=config.SMTP_URL||(config.SMTP_URL_FILE?readFileSync(config.SMTP_URL_FILE,"utf8").trim():"");
+  const emailValues=[smtpUrl,config.EMAIL_FROM,config.ACCOUNT_RECOVERY_BASE_URL];if(emailValues.some(Boolean)&&!emailValues.every(Boolean))throw new Error("SMTP URL, email sender, and account recovery URL must be configured together");
+  if(config.NODE_ENV==="production"&&config.AUTH_MODE==="local"&&!emailValues.every(Boolean))throw new Error("Verified email recovery configuration is required when AUTH_MODE=local in production");
   return {
     ...config,
     ALLOW_PUBLIC_REGISTRATION: config.ALLOW_PUBLIC_REGISTRATION ?? config.NODE_ENV !== "production",
@@ -93,6 +100,8 @@ export function loadConfig(env = process.env) {
     OBJECT_STORAGE_ACCESS_KEY_ID:objectStorageAccessKeyId||undefined,
     OBJECT_STORAGE_SECRET_ACCESS_KEY:objectStorageSecretAccessKey||undefined,
     objectStorageConfigured:objectStorageValues.every(Boolean),
+    SMTP_URL:smtpUrl||undefined,
+    emailDeliveryConfigured:emailValues.every(Boolean),
     corsOrigins: [...new Set((config.CORS_ORIGINS + "," + (config.PUBLIC_ORIGINS || "")).split(",").map((value) => value.trim()).filter(Boolean))]
   };
 }

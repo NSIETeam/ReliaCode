@@ -64,6 +64,9 @@ test("password consumption is one atomic CTE and guards purpose, expiry, and reu
   assert.match(call.text, /expires_at > now\(\)/);
   assert.match(call.text, /UPDATE local_users/);
   assert.match(call.text, /SET password_hash=\$3/);
+  assert.match(call.text, /UPDATE admin_sessions/);
+  assert.match(call.text, /revoked_at=now\(\)/);
+  assert.match(call.text, /INSERT INTO authentication_events/);
   assert.deepEqual(call.params, ["t1", "2026-01-01T00:10:00.000Z", "scrypt$hash"]);
 });
 

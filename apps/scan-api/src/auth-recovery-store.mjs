@@ -68,12 +68,19 @@ export function createPostgresRecoveryStore(db) {
          WHERE id=$1 AND purpose='PASSWORD_RESET'
            AND consumed_at IS NULL AND expires_at > now()
          RETURNING user_id
-       )
+       ), updated AS (
        UPDATE local_users AS u
        SET password_hash=$3, updated_at=now()
        FROM consumed
        WHERE u.id=consumed.user_id
-       RETURNING u.id`,
+       RETURNING u.id,u.tenant_id
+       ), revoked AS (
+         UPDATE admin_sessions s SET revoked_at=now(),revoked_by='PASSWORD_RESET',revocation_reason='Password was reset'
+         FROM updated WHERE s.user_id=updated.id AND s.revoked_at IS NULL RETURNING s.id
+       ), security_event AS (
+         INSERT INTO authentication_events(tenant_id,user_id,event_type,risk_level,actor_id,reason)
+         SELECT tenant_id,id,'SESSION_REVOKED','LOW',id::text,'Password was reset' FROM updated RETURNING id
+       ) SELECT id FROM updated`,
       [id, consumedAt, passwordHash]
     );
     return (result.rowCount ?? result.rows?.length ?? 0) > 0;
