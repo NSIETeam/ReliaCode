@@ -320,7 +320,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
   });
 
   app.post('/api/auth/register', async (request, reply) => {
-    if (config.AUTH_MODE !== 'local') return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
+    if (config.AUTH_MODE !== 'local' || !config.ALLOW_PUBLIC_REGISTRATION) return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
     const now=Date.now(), key='register:'+request.ip;
     const attempt=loginAttempts.get(key) || { count:0, resetAt:now+300000 };
     if (attempt.resetAt<=now) { attempt.count=0; attempt.resetAt=now+300000; }

@@ -9,6 +9,7 @@ services:
       DATABASE_URL_FILE: /run/secrets/database_url
       DATABASE_SSL: ${DATABASE_SSL:-false}
       AUTH_MODE: ${AUTH_MODE:-local}
+      ALLOW_PUBLIC_REGISTRATION: "false"
       ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
       OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:-reliacode-api}
