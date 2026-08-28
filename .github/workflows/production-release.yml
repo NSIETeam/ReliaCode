@@ -46,6 +46,7 @@ jobs:
           context: apps/scan-api
           load: true
           push: false
+          pull: true
           tags: reliacode-api:scan
           build-args: |
             APP_VERSION=sha-${{ github.sha }}
@@ -72,6 +73,7 @@ jobs:
           context: apps/scan-api
           platforms: linux/amd64,linux/arm64
           push: true
+          pull: true
           tags: |
             ${{ env.API_IMAGE }}:sha-${{ github.sha }}
             ${{ env.API_IMAGE }}:latest

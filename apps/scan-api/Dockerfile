@@ -3,7 +3,10 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
-FROM gcr.io/distroless/nodejs24-debian13@sha256:ffab599740d4aaa66029d02b9e6d3de4f622fefb7410081c5ef69c86430f364d
+# Distroless publishes rebuilt nonroot images as Debian security fixes land.
+# The production workflow forces a fresh pull and records the resolved digest
+# in BuildKit provenance while the resulting application image is SHA-tagged.
+FROM gcr.io/distroless/nodejs24-debian13:nonroot
 ARG APP_VERSION=development
 ARG GIT_SHA=unknown
 ENV NODE_ENV=production
