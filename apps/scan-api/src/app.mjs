@@ -16,11 +16,7 @@ import { rotateLocalSession } from "./session-security.mjs";
 import { registerRecoveryRoutes } from "./recovery-routes.mjs";
 import { registerManualRecoveryRoutes } from "./manual-recovery-routes.mjs";
 import { runWithDatabaseContext,useTenantDatabaseContext,useSystemDatabaseContext } from "./database-context.mjs";
-
-export function hasFreshPasskeyVerification(session,minutes,now=Date.now()) {
-  const verifiedAt=Date.parse(String(session?.passkey_verified_at||""));
-  return Number.isFinite(verifiedAt) && verifiedAt<=now && now-verifiedAt<=minutes*60_000;
-}
+import { hasFreshPasskeyVerification } from "./passkey-policy.mjs";
 
 export async function buildApp({ config, db }) {
   const app = Fastify({

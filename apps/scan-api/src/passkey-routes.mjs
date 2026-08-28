@@ -3,6 +3,9 @@ import { randomBytes } from "node:crypto";
 import { z } from "zod";
 import { hashToken } from "./auth.mjs";
 import { createLocalSession,sessionCookies } from "./session-security.mjs";
+import { ADMIN_PASSKEY_ROLES,requireFreshPasskeyVerification } from "./passkey-policy.mjs";
+import { parseIdempotencyKey } from "./schemas.mjs";
+import { getIdempotentResponse,lockIdempotencyKey,requestHash,saveIdempotentResponse } from "./idempotency.mjs";
 
 function normalized(value){return String(value).trim().toLowerCase();}
 function webauthnConfig(config){
@@ -12,6 +15,33 @@ function webauthnConfig(config){
 }
 async function storeChallenge(db,{challenge,userId,purpose}){await db.query("DELETE FROM webauthn_challenges WHERE expires_at<=now() OR used_at IS NOT NULL");await db.query("INSERT INTO webauthn_challenges(challenge_hash,user_id,purpose,expires_at) VALUES($1,$2,$3,now()+interval '5 minutes')",[hashToken(challenge),userId,purpose]);}
 async function consumeChallenge(client,challenge,purpose){const result=await client.query("UPDATE webauthn_challenges SET used_at=now() WHERE challenge_hash=$1 AND purpose=$2 AND used_at IS NULL AND expires_at>now() RETURNING user_id",[hashToken(challenge),purpose]);if(!result.rowCount){const e=new Error("Passkey challenge is invalid or expired");e.statusCode=400;e.code="PASSKEY_CHALLENGE_INVALID";throw e;}return result.rows[0];}
+
+export async function revokePasskey(client,{id,userId,tenantId,organizationId,role,requestId,idempotencyKey}){
+  const credentials=await client.query("SELECT id FROM webauthn_credentials WHERE user_id=$1 ORDER BY id FOR UPDATE",[userId]);
+  if(!credentials.rows.some(row=>row.id===id))return false;
+  const minimum=ADMIN_PASSKEY_ROLES.has(role)?2:1;
+  if(credentials.rowCount<=minimum)throw Object.assign(new Error(`At least ${minimum} Passkey${minimum===1?'':'s'} must remain registered`),{statusCode:409,code:"PASSKEY_MINIMUM_REQUIRED"});
+  await client.query("DELETE FROM webauthn_credentials WHERE id=$1 AND user_id=$2",[id,userId]);
+  await client.query(`INSERT INTO audit_log(tenant_id,actor_id,actor_role,organization_id,action,entity_type,entity_id,request_id,after_state)
+    VALUES($1,$2,$3,$4,'PASSKEY_REVOKED','WEBAUTHN_CREDENTIAL',$5,$6,$7)`,[tenantId,userId,role,organizationId,id,requestId,{reason:"User revoked Passkey",idempotencyKey,remaining:credentials.rowCount-1}]);
+  return true;
+}
+
+export async function issueRecoveryCodes(client,{userId,tenantId,organizationId,role,requestId,idempotencyKey,reason}){
+  const digest=requestHash("RECOVERY_CODES_ROTATE",{reason});
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`recovery-codes:${tenantId}:${userId}:${idempotencyKey}`]);
+  const existing=await client.query("SELECT request_hash FROM recovery_code_issuances WHERE tenant_id=$1 AND user_id=$2 AND idempotency_key=$3",[tenantId,userId,idempotencyKey]);
+  if(existing.rowCount){
+    if(existing.rows[0].request_hash!==digest)throw Object.assign(new Error("Idempotency key was already used with a different request"),{statusCode:409,code:"IDEMPOTENCY_CONFLICT"});
+    return{duplicate:true,codes:[]};
+  }
+  const codes=Array.from({length:10},()=>randomBytes(9).toString("base64url").toUpperCase());
+  await client.query("DELETE FROM account_recovery_codes WHERE user_id=$1",[userId]);
+  for(const code of codes)await client.query("INSERT INTO account_recovery_codes(user_id,code_hash) VALUES($1,$2)",[userId,hashToken(code)]);
+  await client.query("INSERT INTO recovery_code_issuances(tenant_id,user_id,idempotency_key,request_hash) VALUES($1,$2,$3,$4)",[tenantId,userId,idempotencyKey,digest]);
+  await client.query(`INSERT INTO audit_log(tenant_id,actor_id,actor_role,organization_id,action,entity_type,entity_id,request_id,after_state) VALUES($1,$2,$3,$4,'RECOVERY_CODES_ROTATED','LOCAL_USER',$2,$5,$6)`,[tenantId,userId,role,organizationId,requestId,{reason,count:codes.length,idempotencyKey}]);
+  return{duplicate:false,codes};
+}
 
 export function registerPasskeyRoutes(app,{db,config}){
   app.get("/api/auth/passkeys",async(request)=>{const result=await db.query("SELECT id,name,transports,device_type,backed_up,last_used_at,created_at FROM webauthn_credentials WHERE user_id=$1 ORDER BY created_at DESC",[request.principal.id]);return{items:result.rows};});
@@ -60,8 +90,30 @@ export function registerPasskeyRoutes(app,{db,config}){
     request.authSession.passkey_verified_at=verifiedAt;
     return{verified:true,verifiedAt,expiresAt:new Date(new Date(verifiedAt).getTime()+config.PASSKEY_STEP_UP_MINUTES*60_000).toISOString()};
   });
+  app.delete("/api/auth/passkeys/:id",async(request,reply)=>{
+    if(config.AUTH_MODE!=="local")throw Object.assign(new Error("Route not found"),{statusCode:404,code:"NOT_FOUND"});
+    requireFreshPasskeyVerification(request,config);
+    const id=z.string().min(16).max(1024).parse(request.params.id),idempotencyKey=parseIdempotencyKey(request);
+    await db.transaction(async client=>{
+      const operation="PASSKEY_REVOKE",digest=requestHash(operation,{id});
+      await lockIdempotencyKey(client,request.principal.tenantId,idempotencyKey);
+      const cached=await getIdempotentResponse(client,request.principal.tenantId,idempotencyKey,digest);
+      if(cached)return;
+      const revoked=await revokePasskey(client,{id,userId:request.principal.id,tenantId:request.principal.tenantId,organizationId:request.principal.organizationId,role:request.principal.role,requestId:request.id,idempotencyKey});
+      await saveIdempotentResponse(client,{tenantId:request.principal.tenantId,key:idempotencyKey,operation,hash:digest,status:204,body:{revoked}});
+    });
+    return reply.code(204).send();
+  });
   app.post("/api/auth/recovery-codes",async(request,reply)=>{
-    const body=z.object({reason:z.string().trim().min(3).max(500)}).parse(request.body);const codes=Array.from({length:10},()=>randomBytes(9).toString("base64url").toUpperCase());await db.transaction(async(client)=>{await client.query("DELETE FROM account_recovery_codes WHERE user_id=$1",[request.principal.id]);for(const code of codes)await client.query("INSERT INTO account_recovery_codes(user_id,code_hash) VALUES($1,$2)",[request.principal.id,hashToken(code)]);await client.query(`INSERT INTO audit_log(tenant_id,actor_id,actor_role,organization_id,action,entity_type,entity_id,request_id,after_state) VALUES($1,$2,$3,$4,'RECOVERY_CODES_ROTATED','LOCAL_USER',$2,$5,$6)`,[request.principal.tenantId,request.principal.id,request.principal.role,request.principal.organizationId,request.id,{reason:body.reason,count:codes.length}]);});return reply.code(201).send({codes});
+    if(ADMIN_PASSKEY_ROLES.has(request.principal.role)){
+      const passkeys=await db.query("SELECT count(*)::int count FROM webauthn_credentials WHERE user_id=$1",[request.principal.id]);
+      if(Number(passkeys.rows[0]?.count||0)<2)throw Object.assign(new Error("Administrators must register at least two Passkeys before rotating recovery codes"),{statusCode:428,code:"ADMIN_PASSKEYS_REQUIRED"});
+      requireFreshPasskeyVerification(request,config);
+    }
+    const body=z.object({reason:z.string().trim().min(3).max(500)}).parse(request.body),idempotencyKey=parseIdempotencyKey(request);
+    const result=await db.transaction(client=>issueRecoveryCodes(client,{userId:request.principal.id,tenantId:request.principal.tenantId,organizationId:request.principal.organizationId,role:request.principal.role,requestId:request.id,idempotencyKey,reason:body.reason}));
+    if(result.duplicate)return reply.code(409).send({code:"RECOVERY_CODES_ALREADY_ISSUED",message:"Recovery codes were already issued for this idempotency key and cannot be displayed again"});
+    return reply.code(201).send({codes:result.codes});
   });
   app.post("/api/auth/recovery-codes/consume",{config:{rateLimit:{max:10,timeWindow:"15 minutes"}}},async(request,reply)=>{if(config.AUTH_MODE!=="local")return reply.code(404).send({code:"NOT_FOUND",message:"Route not found"});const body=z.object({username:z.string().trim().min(1).max(254),code:z.string().trim().min(8).max(80)}).parse(request.body);const consumed=await db.query(`WITH matched AS (
       SELECT c.id,c.user_id FROM account_recovery_codes c JOIN local_users u ON u.id=c.user_id

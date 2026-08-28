@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildApp,hasFreshPasskeyVerification } from "../src/app.mjs";
+import { buildApp } from "../src/app.mjs";
 import { hashToken } from "../src/auth.mjs";
 import { loadConfig } from "../src/config.mjs";
+import { hasFreshPasskeyVerification } from "../src/passkey-policy.mjs";
 import { createLocalSession } from "../src/session-security.mjs";
 
 const now=Date.parse("2026-08-28T05:00:00.000Z");
