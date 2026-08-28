@@ -23,7 +23,7 @@ export async function processOutboxEvent(db,config,row,{fetchImpl=fetch}={}) {
     return;
   }
   try {
-    await captureEpcisDocument(config.OPEN_EPCIS_BASE_URL,document,{outboxId:row.id,fetchImpl});
+    await captureEpcisDocument(config.OPEN_EPCIS_BASE_URL,document,{outboxId:row.id,bearerToken:config.OPEN_EPCIS_BEARER_TOKEN,fetchImpl});
     await db.query("UPDATE event_outbox SET processed_at=now(),locked_at=NULL,last_error=NULL WHERE id=$1", [row.id]);
   } catch (error) {
     await db.query(

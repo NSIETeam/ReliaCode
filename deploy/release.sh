@@ -9,6 +9,7 @@ cd "$deploy_dir"
 test -f .env
 test -s secrets/database_url.txt
 test -s secrets/migration_database_url.txt
+test -s secrets/openepcis_bearer_token.txt
 
 export RELIACODE_API_IMAGE="ghcr.io/nsieteam/reliacode-api:sha-${RELEASE_SHA}"
 export RELIACODE_WEB_IMAGE="ghcr.io/nsieteam/reliacode-web:sha-${RELEASE_SHA}"

@@ -13,6 +13,7 @@ x-api-environment: &api_environment
   CORS_ORIGINS: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
   TRUST_PROXY: "true"
   OPEN_EPCIS_BASE_URL: ${OPEN_EPCIS_BASE_URL:?OPEN_EPCIS_BASE_URL is required}
+  OPEN_EPCIS_BEARER_TOKEN_FILE: /run/secrets/openepcis_bearer_token
   GS1_DIGITAL_LINK_BASE_URL: ${GS1_DIGITAL_LINK_BASE_URL:?GS1_DIGITAL_LINK_BASE_URL is required}
   WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-ReliaCode}
   WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?WEBAUTHN_RP_ID is required}
@@ -31,7 +32,7 @@ x-api-environment: &api_environment
   OBJECT_STORAGE_SECRET_ACCESS_KEY_FILE: /run/secrets/object_storage_secret_access_key
   OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-false}
 
-x-api-secrets: &api_secrets [database_url, object_storage_access_key_id, object_storage_secret_access_key, smtp_url]
+x-api-secrets: &api_secrets [database_url, openepcis_bearer_token, object_storage_access_key_id, object_storage_secret_access_key, smtp_url]
 
 services:
   migrate:
@@ -40,7 +41,7 @@ services:
     environment:
       <<: *api_environment
       MIGRATION_DATABASE_URL_FILE: /run/secrets/migration_database_url
-    secrets: [database_url, migration_database_url, object_storage_access_key_id, object_storage_secret_access_key, smtp_url]
+    secrets: [database_url, migration_database_url, openepcis_bearer_token, object_storage_access_key_id, object_storage_secret_access_key, smtp_url]
     restart: "no"
 
   api:
@@ -125,6 +126,8 @@ secrets:
     file: ./secrets/database_url.txt
   migration_database_url:
     file: ./secrets/migration_database_url.txt
+  openepcis_bearer_token:
+    file: ./secrets/openepcis_bearer_token.txt
   object_storage_access_key_id:
     file: ./secrets/object_storage_access_key_id.txt
   object_storage_secret_access_key:

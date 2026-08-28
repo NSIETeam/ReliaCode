@@ -40,6 +40,8 @@ const schema = z.object({
   TRUST_PROXY: boolean.default(false),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   OPEN_EPCIS_BASE_URL: z.string().url().optional(),
+  OPEN_EPCIS_BEARER_TOKEN: z.string().min(20).optional(),
+  OPEN_EPCIS_BEARER_TOKEN_FILE: z.string().min(1).optional(),
   GS1_DIGITAL_LINK_BASE_URL: z.string().url().optional(),
   WEBAUTHN_RP_NAME: z.string().min(1).max(100).default("ReliaCode"),
   WEBAUTHN_RP_ID: z.string().min(1).optional(),
@@ -92,6 +94,8 @@ export function loadConfig(env = process.env) {
   const smtpUrl=config.SMTP_URL||(config.SMTP_URL_FILE?readFileSync(config.SMTP_URL_FILE,"utf8").trim():"");
   const emailValues=[smtpUrl,config.EMAIL_FROM,config.ACCOUNT_RECOVERY_BASE_URL];if(emailValues.some(Boolean)&&!emailValues.every(Boolean))throw new Error("SMTP URL, email sender, and account recovery URL must be configured together");
   if(config.NODE_ENV==="production"&&config.AUTH_MODE==="local"&&!emailValues.every(Boolean))throw new Error("Verified email recovery configuration is required when AUTH_MODE=local in production");
+  const openEpcisBearerToken=config.OPEN_EPCIS_BEARER_TOKEN||(config.OPEN_EPCIS_BEARER_TOKEN_FILE?readFileSync(config.OPEN_EPCIS_BEARER_TOKEN_FILE,"utf8").trim():"");
+  if(config.NODE_ENV==="production"&&config.OPEN_EPCIS_BASE_URL&&!openEpcisBearerToken)throw new Error("OPEN_EPCIS_BEARER_TOKEN or OPEN_EPCIS_BEARER_TOKEN_FILE is required in production");
   return {
     ...config,
     ALLOW_PUBLIC_REGISTRATION: config.ALLOW_PUBLIC_REGISTRATION ?? config.NODE_ENV !== "production",
@@ -101,6 +105,7 @@ export function loadConfig(env = process.env) {
     OBJECT_STORAGE_SECRET_ACCESS_KEY:objectStorageSecretAccessKey||undefined,
     objectStorageConfigured:objectStorageValues.every(Boolean),
     SMTP_URL:smtpUrl||undefined,
+    OPEN_EPCIS_BEARER_TOKEN:openEpcisBearerToken||undefined,
     emailDeliveryConfigured:emailValues.every(Boolean),
     corsOrigins: [...new Set((config.CORS_ORIGINS + "," + (config.PUBLIC_ORIGINS || "")).split(",").map((value) => value.trim()).filter(Boolean))]
   };

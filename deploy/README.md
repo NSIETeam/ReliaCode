@@ -22,7 +22,9 @@
 - Variable `DEPLOY_PORT`：SSH 端口，默认 `22`。
 - Variable `DEPLOY_PATH`：部署目录，默认 `/opt/reliacode/deploy`。
 
-服务器上的 `DEPLOY_PATH` 必须预先保存不入库的 `.env`、`secrets/database_url.txt`、`secrets/migration_database_url.txt`、`secrets/object_storage_access_key_id.txt`、`secrets/object_storage_secret_access_key.txt` 和 `secrets/smtp_url.txt`。SMTP URL 应包含受限的事务邮件账号凭据。工作流只覆盖 `compose.production.yaml` 与 `release.sh`，不会覆盖生产密钥。对象存储凭据应限制为导出 bucket 的读写权限，不得授予账户级管理权限。建议给 `production` Environment 配置 required reviewers，使自动任务在真正更新服务器前等待人工批准。
+服务器上的 `DEPLOY_PATH` 必须预先保存不入库的 `.env`、`secrets/database_url.txt`、`secrets/migration_database_url.txt`、`secrets/openepcis_bearer_token.txt`、`secrets/object_storage_access_key_id.txt`、`secrets/object_storage_secret_access_key.txt` 和 `secrets/smtp_url.txt`。SMTP URL 应包含受限的事务邮件账号凭据；OpenEPCIS 凭据只授予 capture/query 所需权限。工作流只覆盖 `compose.production.yaml` 与 `release.sh`，不会覆盖生产密钥。对象存储凭据应限制为导出 bucket 的读写权限，不得授予账户级管理权限。建议给 `production` Environment 配置 required reviewers，使自动任务在真正更新服务器前等待人工批准。
+
+GitHub `integration` Environment 可配置 `OPEN_EPCIS_CONTRACT_BASE_URL` 与 `OPEN_EPCIS_CONTRACT_BEARER_TOKEN`，手动运行 `openepcis-live-contract`。任务会写入一个唯一合成事件并在 60 秒内通过标准 Query API 查回；该门禁应指向隔离的联调仓库，不应污染正式业务事件仓库。
 
 `database_url.txt` 必须使用专用的非超级用户、无 `BYPASSRLS` 权限的应用数据库角色；`migration_database_url.txt` 使用独立受控的 schema owner，只提供给一次性迁移容器。API 就绪检查会拒绝可绕过 RLS 的连接角色。每个租户请求都在事务内设置数据库租户上下文，后台 worker、登录恢复、公开投影和平台控制面通过显式系统上下文运行。
 
