@@ -656,6 +656,18 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       const nextStatus = nextObjectStatus(body.eventType, object.level, object.status);
       const stateApplied = body.eventType !== "VERIFY" && verification.status === "VERIFIED";
       const effectiveStatus = stateApplied ? nextStatus : object.status;
+      const affectedObjects=[{...object,depth:0,resulting_status:effectiveStatus}];
+      if(stateApplied&&!["PACKING","UNPACKING"].includes(body.eventType)&&["CASE","PALLET"].includes(object.level)){
+        const descendants=await client.query(`WITH RECURSIVE tree AS (
+          SELECT id,parent_id,0 depth,ARRAY[id] path FROM serialized_objects WHERE tenant_id=$1 AND id=$2
+          UNION ALL
+          SELECT child.id,child.parent_id,tree.depth+1,tree.path||child.id FROM tree
+          JOIN serialized_objects child ON child.tenant_id=$1 AND child.parent_id=tree.id
+          WHERE tree.depth<16 AND NOT child.id=ANY(tree.path)
+        ) SELECT so.*,tree.depth FROM tree JOIN serialized_objects so ON so.tenant_id=$1 AND so.id=tree.id
+          WHERE tree.depth>0 ORDER BY tree.depth,so.id FOR UPDATE OF so`,[request.principal.tenantId,object.id]);
+        for(const descendant of descendants.rows)affectedObjects.push({...descendant,resulting_status:nextObjectStatus(body.eventType,descendant.level,descendant.status)});
+      }
       let parentObject=null;
       if(body.eventType==="PACKING"){
         const parent=await client.query("SELECT * FROM serialized_objects WHERE tenant_id=$1 AND code=$2 FOR UPDATE",[request.principal.tenantId,body.parentObjectCode]);
@@ -670,6 +682,10 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
         [request.principal.tenantId,body.eventType,object.id,body.shipmentId||null,body.documentId||null,request.principal.id,request.principal.role,request.principal.organizationId,device.deviceId,device.locationId,body.eventTime,device.readPoint,verification.status,body.metadata,key]
       );
+      const snapshots=affectedObjects.map(item=>({objectId:item.id,depth:item.depth,parentObjectId:item.parent_id||null,previousStatus:item.status,resultingStatus:item.resulting_status,objectSnapshot:{code:item.code,level:item.level,lot:item.lot||null,parentObjectId:item.parent_id||null,currentOrganizationId:item.current_organization_id||null,productId:item.product_id}}));
+      await client.query(`INSERT INTO trace_event_object_snapshots(tenant_id,trace_event_id,object_id,depth,parent_object_id,previous_status,resulting_status,object_snapshot)
+        SELECT $1,$2,x.object_id,x.depth,x.parent_object_id,x.previous_status,x.resulting_status,x.object_snapshot
+        FROM jsonb_to_recordset($3::jsonb) AS x(object_id uuid,depth integer,parent_object_id uuid,previous_status text,resulting_status text,object_snapshot jsonb)`,[request.principal.tenantId,event.rows[0].id,JSON.stringify(snapshots.map(item=>({object_id:item.objectId,depth:item.depth,parent_object_id:item.parentObjectId,previous_status:item.previousStatus,resulting_status:item.resultingStatus,object_snapshot:item.objectSnapshot})))]);
       await client.query(
         `INSERT INTO event_outbox(tenant_id,aggregate_type,aggregate_id,event_type,payload)
          VALUES($1,'SERIALIZED_OBJECT',$2,'TRACE_EVENT_CAPTURED',$3)`,
@@ -678,6 +694,9 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       if (stateApplied) {
         const parentId=body.eventType==="PACKING"?parentObject.id:body.eventType==="UNPACKING"?null:object.parent_id;
         await client.query("UPDATE serialized_objects SET status=$1,current_organization_id=$2,parent_id=$3 WHERE tenant_id=$4 AND id=$5", [nextStatus, request.principal.organizationId,parentId,request.principal.tenantId,object.id]);
+        if(affectedObjects.length>1)await client.query(`UPDATE serialized_objects so SET status=x.resulting_status,current_organization_id=$2
+          FROM jsonb_to_recordset($1::jsonb) AS x(object_id uuid,resulting_status text)
+          WHERE so.tenant_id=$3 AND so.id=x.object_id`,[JSON.stringify(affectedObjects.slice(1).map(item=>({object_id:item.id,resulting_status:item.resulting_status}))),request.principal.organizationId,request.principal.tenantId]);
         if(body.eventType==="PACKING"||body.eventType==="UNPACKING"){
           const relationshipParent=body.eventType==="PACKING"?parentObject.id:object.parent_id;
           if(!relationshipParent){const error=new Error("Object is not currently packed");error.statusCode=409;error.code="OBJECT_NOT_PACKED";throw error;}
@@ -706,7 +725,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
           riskCase = conflict.rows[0];
         }
       }
-      const result = { event:event.rows[0], object:{...object,status:effectiveStatus}, stateApplied, riskCase, reward };
+      const result = { event:event.rows[0], object:{...object,status:effectiveStatus}, stateApplied, affectedObjectCount:affectedObjects.length, riskCase, reward };
       await audit(client, request, operation, "TRACE_EVENT", event.rows[0].id, null, result);
       await saveIdempotentResponse(client,{tenantId:request.principal.tenantId,key,operation,hash,status:201,body:result});
       return { status:201, body:result };

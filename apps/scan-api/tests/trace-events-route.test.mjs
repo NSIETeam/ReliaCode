@@ -8,13 +8,14 @@ const principal=JSON.stringify({sub:ids.user,tenant_id:ids.tenant,organization_i
 const deviceToken="route-test-device-token-0123456789abcdef";
 const config=loadConfig({NODE_ENV:"test",DATABASE_URL:"postgres://unused",AUTH_MODE:"development",CORS_ORIGINS:"http://localhost:4173",LOG_LEVEL:"silent",REQUIRE_DEVICE_AUTHORIZATION:"true"});
 
-function database({documentObject=true}={}){
+function database({documentObject=true,rootLevel="ITEM",descendants=[]}={}){
   const calls=[];
   const client={query:async(sql,params=[])=>{
     calls.push({sql,params});
     if(sql.includes("FROM idempotency_records"))return{rowCount:0,rows:[]};
     if(sql.includes("FROM devices d"))return{rowCount:1,rows:[{id:ids.device,location_id:ids.location,gln:"6901234567892"}]};
-    if(sql.includes("FROM serialized_objects so JOIN products"))return{rowCount:1,rows:[{id:ids.object,tenant_id:ids.tenant,product_id:ids.product,code:"010691234567890210LOT-A21SERIAL-1",level:"ITEM",status:"COMMISSIONED",parent_id:null,current_organization_id:ids.organization,sku:"SKU-1",gtin:"06912345678902",product_name:"Test product"}]};
+    if(sql.includes("FROM serialized_objects so JOIN products"))return{rowCount:1,rows:[{id:ids.object,tenant_id:ids.tenant,product_id:ids.product,code:"010691234567890210LOT-A21SERIAL-1",level:rootLevel,status:"COMMISSIONED",parent_id:null,current_organization_id:ids.organization,sku:"SKU-1",gtin:"06912345678902",product_name:"Test product"}]};
+    if(sql.includes("WITH RECURSIVE tree AS"))return{rowCount:descendants.length,rows:descendants};
     if(sql.includes("FROM business_documents"))return{rowCount:1,rows:[{id:ids.document,tenant_id:ids.tenant,document_type:"SHIPMENT",status:"APPROVED",from_organization_id:ids.organization,to_organization_id:ids.destination}]};
     if(sql.includes("FROM business_document_objects"))return documentObject?{rowCount:1,rows:[{expected:true,object_snapshot:{id:ids.object}}]}:{rowCount:0,rows:[]};
     if(sql.includes("INSERT INTO trace_events"))return{rowCount:1,rows:[{id:ids.event,event_type:"SHIPPING",event_time:"2026-08-28T09:00:00.000Z",verification_status:"VERIFIED"}]};
@@ -31,6 +32,7 @@ test("state-changing trace route authorizes the device and enforces document mem
   assert.equal(response.statusCode,201,response.body);
   assert.equal(response.json().object.status,"IN_TRANSIT");
   assert.equal(response.json().stateApplied,true);
+  assert.equal(response.json().affectedObjectCount,1);
   const deviceCall=db.calls.find(call=>call.sql.includes("FROM devices d"));
   const membershipCall=db.calls.find(call=>call.sql.includes("FROM business_document_objects"));
   const eventCall=db.calls.find(call=>call.sql.includes("INSERT INTO trace_events"));
@@ -39,6 +41,8 @@ test("state-changing trace route authorizes the device and enforces document mem
   assert.equal(eventCall.params[8],ids.device);
   assert.equal(eventCall.params[9],ids.location);
   assert.equal(eventCall.params[11],"https://id.gs1.org/414/6901234567892");
+  const snapshotCall=db.calls.find(call=>call.sql.includes("INSERT INTO trace_event_object_snapshots"));
+  assert.equal(JSON.parse(snapshotCall.params[2]).length,1);
   assert.ok(db.calls.indexOf(deviceCall)<db.calls.indexOf(eventCall));
 });
 
@@ -48,4 +52,31 @@ test("trace route rejects an object that is absent from the approved document",a
   assert.equal(response.statusCode,409,response.body);
   assert.equal(response.json().code,"OBJECT_NOT_ON_DOCUMENT");
   assert.equal(db.calls.some(call=>call.sql.includes("INSERT INTO trace_events")),false);
+});
+
+test("shipping a case atomically expands children and preserves the relationship snapshot",async t=>{
+  const child={id:"bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",tenant_id:ids.tenant,product_id:ids.product,code:"CHILD-SERIAL-0001",level:"ITEM",status:"PACKED",parent_id:ids.object,current_organization_id:ids.organization,depth:1};
+  const db=database({rootLevel:"CASE",descendants:[child]}),app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject(request());
+  assert.equal(response.statusCode,201,response.body);
+  assert.equal(response.json().affectedObjectCount,2);
+  const snapshotCall=db.calls.find(call=>call.sql.includes("INSERT INTO trace_event_object_snapshots"));
+  const snapshots=JSON.parse(snapshotCall.params[2]);
+  assert.equal(snapshots[1].object_id,child.id);
+  assert.equal(snapshots[1].parent_object_id,ids.object);
+  assert.equal(snapshots[1].previous_status,"PACKED");
+  assert.equal(snapshots[1].resulting_status,"IN_TRANSIT");
+  const expandedUpdate=db.calls.find(call=>call.sql.includes("FROM jsonb_to_recordset")&&call.sql.includes("UPDATE serialized_objects"));
+  assert.deepEqual(JSON.parse(expandedUpdate.params[0]),[{object_id:child.id,resulting_status:"IN_TRANSIT"}]);
+  assert.equal(expandedUpdate.params[2],ids.tenant);
+});
+
+test("one invalid child aborts a case action before any event is persisted",async t=>{
+  const invalidChild={id:"cccccccc-cccc-4ccc-8ccc-cccccccccccc",tenant_id:ids.tenant,product_id:ids.product,code:"CHILD-SERIAL-INVALID",level:"ITEM",status:"SOLD",parent_id:ids.object,current_organization_id:ids.organization,depth:1};
+  const db=database({rootLevel:"CASE",descendants:[invalidChild]}),app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject(request());
+  assert.equal(response.statusCode,409,response.body);
+  assert.equal(response.json().code,"INVALID_STATE_TRANSITION");
+  assert.equal(db.calls.some(call=>call.sql.includes("INSERT INTO trace_events")),false);
+  assert.equal(db.calls.some(call=>call.sql.includes("UPDATE serialized_objects")),false);
 });
