@@ -651,7 +651,8 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
         );
         shipment = shipmentResult.rows[0] || null;
       }
-      const verification = verificationForEvent({ eventType:body.eventType, shipment, object, principal:request.principal });
+      const verificationShipment=shipment||((body.eventType.startsWith("RECEIVING_")&&businessDocument)?{to_organization_id:businessDocument.to_organization_id,expected_object:true}:null);
+      const verification = verificationForEvent({ eventType:body.eventType, shipment:verificationShipment, object, principal:request.principal });
       if (verification.status === "REJECTED") {
         const error = new Error(`Event rejected: ${verification.risk.type}`); error.statusCode=409; error.code=verification.risk.type; throw error;
       }

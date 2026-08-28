@@ -1,0 +1,46 @@
+import assert from "node:assert/strict";
+import { chromium } from "playwright";
+import { testBaseUrl } from "./helpers.mjs";
+
+const ids={tenant:"11111111-1111-4111-8111-111111111111",organization:"22222222-2222-4222-8222-222222222222",user:"44444444-4444-4444-8444-444444444444",document:"99999999-9999-4999-8999-999999999999",device:"55555555-5555-4555-8555-555555555555",child:"77777777-7777-4777-8777-777777777777",parent:"88888888-8888-4888-8888-888888888888"};
+const childCode="010691234567890210LOT-A21CHILD-1",parentCode="010691234567890210LOT-A21CASE-1",deviceToken="domain-api-device-token-0123456789abcdef";
+const browser=await chromium.launch({headless:true}),context=await browser.newContext({viewport:{width:1280,height:900}}),page=await context.newPage();
+let traceRequest=null;
+await page.route("**/runtime-config.js",route=>route.fulfill({contentType:"application/javascript",body:"window.RELIACODE_CONFIG=Object.freeze({apiBaseUrl:'',persistentWorkspace:false,domainApi:true});"}));
+await page.route("**/api/**",async route=>{
+  const request=route.request(),url=new URL(request.url()),path=url.pathname;
+  const json=body=>route.fulfill({status:200,contentType:"application/json",headers:{"x-csrf-token":"csrf-domain-test"},body:JSON.stringify(body)});
+  if(path==="/api/auth/session")return json({csrfToken:"csrf-domain-test",user:{id:ids.user,name:"Factory User",tenantId:ids.tenant,organizationId:ids.organization,organizationName:"Factory 01",role:"FACTORY_OPERATOR",capabilities:["objects:read","events:write:packing","events:write:shipping","events:write:destroying"]}});
+  if(path==="/api/v1/products")return json({items:[]});
+  if(path==="/api/v1/documents")return json({items:[{id:ids.document,reference:"PACK-001",document_type:"PACKING_ORDER",status:"APPROVED"}]});
+  if(path==="/api/v1/devices")return json({items:[{id:ids.device,name:"Packing terminal",status:"ACTIVE",allowed_event_types:["PACKING"]}]});
+  if(path===`/api/v1/objects/${encodeURIComponent(childCode)}`)return json({object:{id:ids.child,code:childCode,level:"ITEM",status:"COMMISSIONED",product_name:"Test item"},events:[]});
+  if(path===`/api/v1/objects/${encodeURIComponent(parentCode)}`)return json({object:{id:ids.parent,code:parentCode,level:"CASE",status:"COMMISSIONED",product_name:"Test case"},events:[]});
+  if(path===`/api/v1/documents/${ids.document}/objects`)return json({items:[{object_id:ids.child,expected:true,line_role:"ACTION",fulfilled_event_id:null},{object_id:ids.parent,expected:true,line_role:"CONTEXT",fulfilled_event_id:null}]});
+  if(path==="/api/v1/trace-events"&&request.method()==="POST"){traceRequest={headers:request.headers(),body:request.postDataJSON()};return json({event:{id:"aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"},stateApplied:true,affectedObjectCount:1});}
+  return route.fulfill({status:404,contentType:"application/json",body:JSON.stringify({code:"NOT_FOUND",message:`Unhandled ${request.method()} ${path}`})});
+});
+await page.goto(testBaseUrl,{waitUntil:"networkidle"});
+await page.locator('[data-view="receive"]').click();
+assert.match(await page.locator("#receive").innerText(),/服务端业务扫码/);
+await page.locator("#domain-event-type").selectOption("PACKING");
+await page.locator("#domain-document-id").selectOption(ids.document);
+await page.locator("#domain-device-id").selectOption(ids.device);
+await page.locator("#domain-device-token").fill(deviceToken);
+await page.locator("#field-code").fill(childCode);
+await page.locator("#parent-code").fill(parentCode);
+await page.locator("#validate-field").click();
+await page.locator("#confirm-field").waitFor();
+assert.match(await page.locator("#field-result").innerText(),/在线核验通过/);
+assert.equal(await page.evaluate(token=>Object.values(localStorage).some(value=>String(value).includes(token)),deviceToken),false,"device credential must never enter localStorage");
+await page.locator("#confirm-field").click();
+await page.waitForFunction(()=>document.querySelector("#toast")?.textContent.includes("已记录"));
+assert.ok(traceRequest);
+assert.equal(traceRequest.headers["x-reliacode-device-id"],ids.device);
+assert.equal(traceRequest.headers["x-reliacode-device-token"],deviceToken);
+assert.ok(traceRequest.headers["idempotency-key"]);
+assert.equal(traceRequest.headers["x-csrf-token"],"csrf-domain-test");
+assert.deepEqual(traceRequest.body,{eventType:"PACKING",objectCode:childCode,documentId:ids.document,parentObjectCode:parentCode,readPoint:"urn:reliacode:client:ignored",eventTime:traceRequest.body.eventTime,metadata:{client:"scan-web"}});
+assert.match(traceRequest.body.eventTime,/Z$/);
+await browser.close();
+console.log("DOMAIN API E2E PASS: server validation, in-memory device credential, and governed trace command");

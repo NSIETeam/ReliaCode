@@ -1,6 +1,6 @@
-# ReliaCode（可靠码）本地优先版
+# ReliaCode（可靠码）Web
 
-此版本可直接部署到 GitHub Pages。仓库不包含任何预置品牌、账号、产品、可靠码、事件、奖励或风险数据。
+同一前端提供两种明确隔离的运行模式。GitHub Pages 是无预置数据的本地演示工作区；生产容器通过 `RELIACODE_API_URL` 启用 `domainApi`，所有业务事实来自 Scan API 与 PostgreSQL，浏览器本地存储只用于非敏感界面状态。
 
 首次打开时创建空白工作区，然后可以：
 
@@ -16,7 +16,16 @@
 npm run dev
 ```
 
-打开 `http://localhost:4173`。数据仅保存在当前浏览器的 `localStorage`；清理浏览器数据前应先导出备份。
+打开 `http://localhost:4173`。未配置 API 时数据仅保存在当前浏览器的 `localStorage`；该模式不得用于多人生产作业。
+
+生产模式由 Web 服务器反向代理 API，并动态输出运行配置：
+
+```powershell
+$env:RELIACODE_API_URL='http://scan-api:4180'
+npm start
+```
+
+生产现场工作台从服务端加载当前角色可执行的事件、已批准/执行中单据与活动设备。核验阶段查询对象和单据动作行，确认阶段提交 CSRF、幂等键、设备 ID 与设备令牌到 `/api/v1/trace-events`；不创建离线事件或浏览器待同步队列。设备令牌只保存在当前页面内存，刷新即清除，不写入 `localStorage`。装箱、拆箱、换箱、发货、渠道/门店收货、退货、销售和销毁均由服务端状态机最终裁决。
 
 生码任务提供两种导出：
 
@@ -27,7 +36,7 @@ npm run dev
 
 ## 公开验证 API
 
-生产部署在 `runtime-config.js` 中设置 API 地址：
+纯静态公开验证部署可在 `runtime-config.js` 中设置 API 地址：
 
 ```js
 window.RELIACODE_CONFIG = Object.freeze({

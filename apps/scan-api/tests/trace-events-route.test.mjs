@@ -8,24 +8,25 @@ const principal=JSON.stringify({sub:ids.user,tenant_id:ids.tenant,organization_i
 const deviceToken="route-test-device-token-0123456789abcdef";
 const config=loadConfig({NODE_ENV:"test",DATABASE_URL:"postgres://unused",AUTH_MODE:"development",CORS_ORIGINS:"http://localhost:4173",LOG_LEVEL:"silent",REQUIRE_DEVICE_AUTHORIZATION:"true"});
 
-function database({documentObject=true,documentLineRole="ACTION",rootLevel="ITEM",rootParentId=null,descendants=[],documentType="SHIPMENT",eventType="SHIPPING",parentRows=[]}={}){
+function database({documentObject=true,documentLineRole="ACTION",rootLevel="ITEM",rootStatus=null,rootParentId=null,descendants=[],documentType="SHIPMENT",documentToOrganization=ids.destination,eventType="SHIPPING",parentRows=[]}={}){
   const calls=[];
   const client={query:async(sql,params=[])=>{
     calls.push({sql,params});
     if(sql.includes("FROM idempotency_records"))return{rowCount:0,rows:[]};
     if(sql.includes("FROM devices d"))return{rowCount:1,rows:[{id:ids.device,location_id:ids.location,gln:"6901234567892"}]};
-    if(sql.includes("FROM serialized_objects so JOIN products"))return{rowCount:1,rows:[{id:ids.object,tenant_id:ids.tenant,product_id:ids.product,code:"010691234567890210LOT-A21SERIAL-1",level:rootLevel,status:rootParentId?"PACKED":"COMMISSIONED",parent_id:rootParentId,current_organization_id:ids.organization,sku:"SKU-1",gtin:"06912345678902",product_name:"Test product"}]};
+    if(sql.includes("FROM serialized_objects so JOIN products"))return{rowCount:1,rows:[{id:ids.object,tenant_id:ids.tenant,product_id:ids.product,code:"010691234567890210LOT-A21SERIAL-1",level:rootLevel,status:rootStatus||(rootParentId?"PACKED":"COMMISSIONED"),parent_id:rootParentId,current_organization_id:ids.organization,sku:"SKU-1",gtin:"06912345678902",product_name:"Test product"}]};
     if(sql.includes("WITH RECURSIVE tree AS"))return{rowCount:descendants.length,rows:descendants};
-    if(sql.includes("FROM business_documents"))return{rowCount:1,rows:[{id:ids.document,tenant_id:ids.tenant,document_type:documentType,status:"APPROVED",from_organization_id:ids.organization,to_organization_id:ids.destination}]};
+    if(sql.includes("FROM business_documents"))return{rowCount:1,rows:[{id:ids.document,tenant_id:ids.tenant,document_type:documentType,status:"APPROVED",from_organization_id:ids.organization,to_organization_id:documentToOrganization}]};
     if(sql.includes("FROM business_document_objects"))return documentObject?{rowCount:1,rows:[{expected:true,line_role:documentLineRole,fulfilled_event_id:null,object_snapshot:{id:ids.object}}]}:{rowCount:0,rows:[]};
     if(sql.includes("SELECT * FROM serialized_objects WHERE tenant_id=$1 AND (id=$2 OR code=$3)"))return{rowCount:parentRows.length,rows:parentRows};
     if(sql.includes("INSERT INTO trace_events"))return{rowCount:1,rows:[{id:ids.event,event_type:eventType,event_time:"2026-08-28T09:00:00.000Z",read_point:"https://id.gs1.org/414/6901234567892",organization_id:ids.organization,verification_status:"VERIFIED"}]};
+    if(sql.includes("FROM campaigns c JOIN campaign_versions"))return{rowCount:0,rows:[]};
     return{rowCount:1,rows:[{}]};
   }};
   return{calls,query:async(sql,params)=>{calls.push({sql,params});if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};return client.query(sql,params);},transaction:work=>work(client)};
 }
 
-function request(payload={}){return{method:"POST",url:"/api/v1/trace-events",headers:{"x-reliacode-principal":principal,"x-reliacode-device-id":ids.device,"x-reliacode-device-token":deviceToken,"idempotency-key":"trace-route-shipping-0001"},payload:{eventType:"SHIPPING",objectCode:"010691234567890210LOT-A21SERIAL-1",documentId:ids.document,readPoint:"urn:ignored:when-device-is-required",eventTime:"2026-08-28T09:00:00.000Z",metadata:{source:"route-test"},...payload}};}
+function request(payload={},role="BRAND_ADMIN"){const requestPrincipal=role==="BRAND_ADMIN"?principal:JSON.stringify({sub:ids.user,tenant_id:ids.tenant,organization_id:ids.organization,role,name:"Route Test"});return{method:"POST",url:"/api/v1/trace-events",headers:{"x-reliacode-principal":requestPrincipal,"x-reliacode-device-id":ids.device,"x-reliacode-device-token":deviceToken,"idempotency-key":"trace-route-shipping-0001"},payload:{eventType:"SHIPPING",objectCode:"010691234567890210LOT-A21SERIAL-1",documentId:ids.document,readPoint:"urn:ignored:when-device-is-required",eventTime:"2026-08-28T09:00:00.000Z",metadata:{source:"route-test"},...payload}};}
 
 test("state-changing trace route authorizes the device and enforces document membership",async t=>{
   const db=database(),app=await buildApp({config,db});t.after(()=>app.close());
@@ -106,4 +107,12 @@ test("repacking moves a child between parents as one event and two immutable rel
   assert.deepEqual(outbox.params[2].aggregations.map(item=>[item.parent.id,item.action]),[[oldParent.id,"DELETE"],[newParent.id,"ADD"]]);
   const snapshots=JSON.parse(db.calls.find(call=>call.sql.includes("INSERT INTO trace_event_object_snapshots")).params[2]);
   assert.equal(snapshots[0].parent_object_id,oldParent.id);assert.equal(snapshots[0].resulting_parent_object_id,newParent.id);
+});
+
+test("receiving uses the governed receipt document without a legacy shipment id",async t=>{
+  const db=database({rootStatus:"IN_TRANSIT",documentType:"RECEIPT",documentToOrganization:ids.organization,eventType:"RECEIVING_STORE"}),app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject(request({eventType:"RECEIVING_STORE"},"STORE_RECEIVER"));
+  assert.equal(response.statusCode,201,response.body);assert.equal(response.json().object.status,"RECEIVED");
+  const eventCall=db.calls.find(call=>call.sql.includes("INSERT INTO trace_events"));assert.equal(eventCall.params[3],null);
+  assert.equal(db.calls.some(call=>call.sql.includes("FROM shipments")),false);
 });

@@ -46,3 +46,12 @@ test("a document with pending action objects cannot be completed",async t=>{
   assert.equal(response.json().code,"DOCUMENT_OBJECTS_PENDING");
   assert.equal(db.calls.some(call=>call.sql.includes("UPDATE business_documents")),false);
 });
+
+test("a field operator can list tenant documents needed for online work",async t=>{
+  const db=database(),app=await buildApp({config,db});t.after(()=>app.close());
+  const fieldHeaders={"x-reliacode-principal":JSON.stringify({sub:ids.user,tenant_id:ids.tenant,organization_id:ids.organization,role:"FACTORY_OPERATOR"})};
+  const response=await app.inject({method:"GET",url:"/api/v1/documents",headers:fieldHeaders});
+  assert.equal(response.statusCode,200,response.body);
+  const query=db.calls.find(call=>call.sql.includes("FROM business_documents")&&call.sql.includes("ORDER BY created_at"));
+  assert.deepEqual(query.params,[ids.tenant]);
+});
