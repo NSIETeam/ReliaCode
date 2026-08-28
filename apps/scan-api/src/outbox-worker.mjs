@@ -16,7 +16,7 @@ export async function claimOutboxEvent(db) {
 }
 
 export async function processOutboxEvent(db,config,row,{fetchImpl=fetch}={}) {
-  const document = toEpcisDocument(row.payload);
+  const document = toEpcisDocument(row.payload,{baseUrl:config.GS1_DIGITAL_LINK_BASE_URL});
   if (!document) {
     await db.query("UPDATE event_outbox SET processed_at=now(),locked_at=NULL WHERE id=$1", [row.id]);
     return;
@@ -41,7 +41,7 @@ export async function processOutboxEvent(db,config,row,{fetchImpl=fetch}={}) {
 }
 
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
-  const config=loadConfig();if(!config.OPEN_EPCIS_BASE_URL)throw new Error("OPEN_EPCIS_BASE_URL is required for the outbox worker");const db=createDatabase(config);let stopping=false;
+  const config=loadConfig();if(!config.OPEN_EPCIS_BASE_URL||!config.GS1_DIGITAL_LINK_BASE_URL)throw new Error("OPEN_EPCIS_BASE_URL and GS1_DIGITAL_LINK_BASE_URL are required for the outbox worker");const db=createDatabase(config);let stopping=false;
   process.on("SIGTERM",()=>{stopping=true;});process.on("SIGINT",()=>{stopping=true;});
   try{while(!stopping){const row=await claimOutboxEvent(db);if(row)await processOutboxEvent(db,config,row);else await new Promise(resolve=>setTimeout(resolve,1000));}}finally{await db.close();}
   }

@@ -1,0 +1,12 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { buildApp } from "../src/app.mjs";
+import { loadConfig } from "../src/config.mjs";
+
+const config=loadConfig({NODE_ENV:"test",DATABASE_URL:"postgres://unused",AUTH_MODE:"development",LOG_LEVEL:"silent"});
+const tenantId="11111111-1111-4111-8111-111111111111";
+const principal=JSON.stringify({sub:"receiver-1",tenant_id:tenantId,organization_id:"22222222-2222-4222-8222-222222222222",role:"DISTRIBUTOR_RECEIVER"});
+
+test("revoked, paused, expired, and ungranted shared object identities all collapse to 404",async(t)=>{let lookup;const db={query:async(sql,params=[])=>{if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};if(sql.includes("FROM supply_object_grants")){lookup={sql,params};return{rowCount:0,rows:[]};}throw new Error(`Unexpected SQL: ${sql}`);}};const app=await buildApp({config,db});t.after(()=>app.close());const response=await app.inject({method:"GET",url:"/api/v1/shared-objects/SHARED-CODE-0001",headers:{"x-reliacode-principal":principal}});assert.equal(response.statusCode,404);assert.equal(response.json().code,"NOT_FOUND");assert.equal(lookup.params[0],tenantId);assert.match(lookup.sql,/r\.status='ACTIVE'/);assert.match(lookup.sql,/g\.status='ACTIVE'/);assert.match(lookup.sql,/g\.expires_at>now\(\)/);});
+
+test("authorized shared object projection omits owner tenant, documents, organizations, and internal ids",async(t)=>{const db={query:async(sql)=>{if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};if(sql.includes("FROM supply_object_grants"))return{rowCount:1,rows:[{code:"SHARED-CODE-0001",level:"CASE",lot:"LOT-8",status:"IN_TRANSIT",sku:"SKU-8",gtin:"06912345678902",product_name:"产品",grant_id:"33333333-3333-4333-8333-333333333333",scopes:["TRACE_READ","RECEIPT_WRITE"],expires_at:null,relationship_type:"DISTRIBUTOR"}]};throw new Error(`Unexpected SQL: ${sql}`);}};const app=await buildApp({config,db});t.after(()=>app.close());const response=await app.inject({method:"GET",url:"/api/v1/shared-objects/SHARED-CODE-0001",headers:{"x-reliacode-principal":principal}});assert.equal(response.statusCode,200);const body=response.json(),serialized=JSON.stringify(body);assert.equal(body.object.status,"IN_TRANSIT");assert.equal(serialized.includes("owner_tenant"),false);assert.equal(serialized.includes("document"),false);assert.equal(serialized.includes("organization"),false);});

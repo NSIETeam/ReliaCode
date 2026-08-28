@@ -7,8 +7,8 @@ export const ROLE_CAPABILITIES = Object.freeze({
   BRAND_ADMIN: ["products:write", "codes:write", "codes:approve", "objects:read", "events:read", "events:write:packing", "events:write:unpacking", "events:write:shipping", "events:write:returning", "events:write:selling", "events:write:destroying", "campaigns:write", "risks:review", "recalls:write", "ledger:read", "members:read", "members:invite", "members:manage", "relationships:write", "locations:write", "devices:write", "documents:write", "integrations:write"],
   BRAND_AUDITOR: ["objects:read", "events:read", "risks:review", "ledger:read"],
   FACTORY_OPERATOR: ["objects:read", "events:write:packing", "events:write:unpacking", "events:write:shipping", "events:write:destroying"],
-  DISTRIBUTOR_RECEIVER: ["objects:read", "events:write:distributor_receiving", "events:write:shipping", "events:write:returning"],
-  STORE_RECEIVER: ["objects:read", "events:write:store_receiving", "events:write:returning", "events:write:selling", "ledger:read:self"],
+  DISTRIBUTOR_RECEIVER: ["objects:read", "events:read", "events:write:distributor_receiving", "events:write:shipping", "events:write:returning"],
+  STORE_RECEIVER: ["objects:read", "events:read", "events:write:store_receiving", "events:write:returning", "events:write:selling", "ledger:read:self"],
   FINANCE: ["ledger:read", "settlements:write"],
   READ_ONLY_AUDITOR: ["objects:read", "events:read", "ledger:read"]
 });

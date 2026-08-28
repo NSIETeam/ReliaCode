@@ -51,6 +51,62 @@ CREATE TABLE IF NOT EXISTS supply_relationships (
 CREATE INDEX IF NOT EXISTS supply_relationships_source_idx ON supply_relationships(source_tenant_id,status);
 CREATE INDEX IF NOT EXISTS supply_relationships_target_idx ON supply_relationships(target_tenant_id,status);
 
+CREATE TABLE IF NOT EXISTS supply_object_grants (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  relationship_id uuid NOT NULL REFERENCES supply_relationships(id),
+  owner_tenant_id uuid NOT NULL REFERENCES tenants(id),
+  partner_tenant_id uuid NOT NULL REFERENCES tenants(id),
+  owner_document_id uuid NOT NULL,
+  scopes text[] NOT NULL,
+  status text NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','REVOKED','EXPIRED')),
+  expires_at timestamptz,
+  created_by text NOT NULL,
+  revoked_by text,
+  revoked_at timestamptz,
+  created_at timestamptz NOT NULL DEFAULT now(),
+  CHECK (owner_tenant_id<>partner_tenant_id)
+);
+CREATE INDEX IF NOT EXISTS supply_object_grants_partner_idx ON supply_object_grants(partner_tenant_id,status,created_at DESC);
+
+CREATE TABLE IF NOT EXISTS supply_grant_objects (
+  grant_id uuid NOT NULL REFERENCES supply_object_grants(id) ON DELETE CASCADE,
+  owner_tenant_id uuid NOT NULL REFERENCES tenants(id),
+  object_id uuid NOT NULL REFERENCES serialized_objects(id),
+  root_object_id uuid NOT NULL REFERENCES serialized_objects(id),
+  packaging_path uuid[] NOT NULL DEFAULT '{}'::uuid[],
+  status_at_grant text NOT NULL,
+  organization_at_grant uuid REFERENCES organizations(id),
+  PRIMARY KEY (grant_id,object_id)
+);
+CREATE INDEX IF NOT EXISTS supply_grant_objects_lookup_idx ON supply_grant_objects(owner_tenant_id,object_id);
+
+CREATE TABLE IF NOT EXISTS shared_trace_events (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  object_owner_tenant_id uuid NOT NULL REFERENCES tenants(id),
+  actor_tenant_id uuid NOT NULL REFERENCES tenants(id),
+  relationship_id uuid NOT NULL REFERENCES supply_relationships(id),
+  grant_id uuid NOT NULL REFERENCES supply_object_grants(id),
+  object_id uuid NOT NULL REFERENCES serialized_objects(id),
+  partner_document_id uuid NOT NULL,
+  event_type text NOT NULL CHECK (event_type IN ('RECEIVING_DISTRIBUTOR','RECEIVING_STORE','RETURNING')),
+  actor_id text NOT NULL,
+  actor_role text NOT NULL,
+  organization_id uuid NOT NULL REFERENCES organizations(id),
+  event_time timestamptz NOT NULL,
+  record_time timestamptz NOT NULL DEFAULT now(),
+  read_point text NOT NULL,
+  verification_status text NOT NULL CHECK (verification_status IN ('VERIFIED','PENDING_REVIEW','REJECTED')),
+  metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+  idempotency_key text NOT NULL,
+  UNIQUE (actor_tenant_id,idempotency_key),
+  CHECK (object_owner_tenant_id<>actor_tenant_id)
+);
+CREATE INDEX IF NOT EXISTS shared_trace_events_owner_object_idx ON shared_trace_events(object_owner_tenant_id,object_id,event_time DESC);
+CREATE INDEX IF NOT EXISTS shared_trace_events_actor_idx ON shared_trace_events(actor_tenant_id,record_time DESC);
+DROP TRIGGER IF EXISTS shared_trace_events_append_only ON shared_trace_events;
+CREATE TRIGGER shared_trace_events_append_only BEFORE UPDATE OR DELETE ON shared_trace_events
+FOR EACH ROW EXECUTE FUNCTION reject_update_delete();
+
 CREATE TABLE IF NOT EXISTS locations (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   tenant_id uuid NOT NULL REFERENCES tenants(id),
@@ -202,6 +258,18 @@ ALTER TABLE package_relationship_events ADD CONSTRAINT package_relationship_even
 ALTER TABLE package_relationship_events DROP CONSTRAINT IF EXISTS package_relationship_events_tenant_child_fk;
 ALTER TABLE package_relationship_events ADD CONSTRAINT package_relationship_events_tenant_child_fk
   FOREIGN KEY (tenant_id,child_object_id) REFERENCES serialized_objects(tenant_id,id);
+ALTER TABLE supply_object_grants DROP CONSTRAINT IF EXISTS supply_object_grants_owner_document_fk;
+ALTER TABLE supply_object_grants ADD CONSTRAINT supply_object_grants_owner_document_fk
+  FOREIGN KEY (owner_tenant_id,owner_document_id) REFERENCES business_documents(tenant_id,id);
+ALTER TABLE supply_grant_objects DROP CONSTRAINT IF EXISTS supply_grant_objects_tenant_object_fk;
+ALTER TABLE supply_grant_objects ADD CONSTRAINT supply_grant_objects_tenant_object_fk
+  FOREIGN KEY (owner_tenant_id,object_id) REFERENCES serialized_objects(tenant_id,id);
+ALTER TABLE shared_trace_events DROP CONSTRAINT IF EXISTS shared_trace_events_owner_object_fk;
+ALTER TABLE shared_trace_events ADD CONSTRAINT shared_trace_events_owner_object_fk
+  FOREIGN KEY (object_owner_tenant_id,object_id) REFERENCES serialized_objects(tenant_id,id);
+ALTER TABLE shared_trace_events DROP CONSTRAINT IF EXISTS shared_trace_events_partner_document_fk;
+ALTER TABLE shared_trace_events ADD CONSTRAINT shared_trace_events_partner_document_fk
+  FOREIGN KEY (actor_tenant_id,partner_document_id) REFERENCES business_documents(tenant_id,id);
 
 CREATE TABLE IF NOT EXISTS webauthn_credentials (
   id text PRIMARY KEY,
