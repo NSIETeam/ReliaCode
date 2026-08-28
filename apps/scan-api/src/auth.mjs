@@ -37,7 +37,7 @@ export async function createAuthenticator(config) {
       const token = readCookie(request.headers.cookie, config.SESSION_COOKIE_NAME);
       if (!token) return null;
       const result = await config.db.query(
-        'SELECT token_hash,csrf_token_hash,user_id,expires_at FROM admin_sessions WHERE token_hash=$1 AND expires_at > now()',
+        'SELECT token_hash,csrf_token_hash,user_id,tenant_id,expires_at,last_seen_at,rotated_at,ip_hash,user_agent,risk_level FROM admin_sessions WHERE token_hash=$1 AND expires_at>now() AND revoked_at IS NULL',
         [hashToken(token)]
       );
       if (!result.rowCount) return null;

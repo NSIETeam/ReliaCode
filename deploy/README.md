@@ -24,6 +24,8 @@
 
 服务器上的 `DEPLOY_PATH` 必须预先保存不入库的 `.env`、`secrets/database_url.txt`、`secrets/object_storage_access_key_id.txt` 和 `secrets/object_storage_secret_access_key.txt`。工作流只覆盖 `compose.production.yaml` 与 `release.sh`，不会覆盖生产密钥。对象存储凭据应限制为导出 bucket 的读写权限，不得授予账户级管理权限。建议给 `production` Environment 配置 required reviewers，使自动任务在真正更新服务器前等待人工批准。
 
+`SESSION_FINGERPRINT_KEY` 与 `WEBHOOK_ENCRYPTION_KEY` 都必须使用独立随机 32 字节 base64url 值，禁止复用。前者用于不可逆会话网络指纹，轮换它会降低历史异常登录关联能力；后者用于解密现有 Webhook 签名密钥，轮换前必须执行端点密钥迁移。
+
 ## 发布顺序
 
 1. 复制 `.env.production.example` 为 `.env` 并填写真实公开配置。

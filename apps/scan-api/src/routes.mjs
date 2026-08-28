@@ -6,6 +6,7 @@ import { getIdempotentResponse, lockIdempotencyKey, requestHash, saveIdempotentR
 import { codeBatchSchema, parseIdempotencyKey, riskDecisionSchema, traceEventSchema } from "./schemas.mjs";
 import { evaluateEntitlements, getPlan } from "./entitlements.mjs";
 import { enqueueWebhookDeliveries } from "./webhooks.mjs";
+import { createLocalSession,rotateLocalSession,sessionCookies } from "./session-security.mjs";
 
 function audit(client, request, action, entityType, entityId, beforeState, afterState) {
   const principal = request.principal;
@@ -110,6 +111,8 @@ function normalized(value) { return String(value).trim().toLocaleLowerCase('en-U
 const roleSchema = z.enum(ROLES);
 const emailSchema = z.string().trim().email().max(254).transform(normalized);
 async function inTransaction(db, work) { return typeof db.transaction === 'function' ? db.transaction(work) : work(db); }
+export async function changeMemberAccountStatus(client,{tenantId,organizationId,userId,actorId,status,reason}){const found=await client.query(`SELECT u.id,u.status,o.owner_user_id FROM local_users u JOIN local_memberships m ON m.user_id=u.id JOIN local_organizations o ON o.id=m.organization_id
+  WHERE u.tenant_id=$1 AND m.organization_id=$2 AND u.id=$3 AND m.status='ACTIVE' FOR UPDATE OF u`,[tenantId,organizationId,userId]);if(!found.rowCount){const error=new Error("Member not found");error.statusCode=404;error.code="MEMBER_NOT_FOUND";throw error;}if(found.rows[0].owner_user_id===userId){const error=new Error("The tenant owner account cannot be frozen");error.statusCode=409;error.code="OWNER_FREEZE_FORBIDDEN";throw error;}const changed=await client.query("UPDATE local_users SET status=$1,updated_at=now() WHERE id=$2 AND tenant_id=$3 RETURNING id,status",[status,userId,tenantId]);if(status==="DISABLED")await client.query("UPDATE admin_sessions SET revoked_at=now(),revoked_by=$1,revocation_reason=$2 WHERE user_id=$3 AND revoked_at IS NULL",[actorId,reason,userId]);await client.query(`INSERT INTO authentication_events(tenant_id,user_id,event_type,risk_level,actor_id,reason) VALUES($1,$2,$3,'LOW',$4,$5)`,[tenantId,userId,status==="DISABLED"?"ACCOUNT_FROZEN":"ACCOUNT_UNFROZEN",actorId,reason]);return{before:found.rows[0],after:changed.rows[0]};}
 function requireOrganizationAdmin(principal) {
   if (principal?.role !== 'BRAND_ADMIN') {
     const error = new Error('Organization administrator permission is required');
@@ -124,22 +127,6 @@ function sessionUser(principal) {
     capabilities:[...principal.capabilities], tenantId:principal.tenantId,
     organizationId:principal.organizationId, organizationName:principal.organizationName || null
   };
-}
-function sessionCookies(config, token, csrf) {
-  const secure = config.SESSION_COOKIE_SECURE ? '; Secure' : '';
-  const age = config.SESSION_TTL_HOURS * 3600;
-  return [config.SESSION_COOKIE_NAME + '=' + token + '; Path=/; HttpOnly; SameSite=Strict; Max-Age=' + age + secure, config.CSRF_COOKIE_NAME + '=' + csrf + '; Path=/; SameSite=Strict; Max-Age=' + age + secure];
-}
-
-async function createSession(db, config, userId=null) {
-  const token = newSessionToken();
-  const csrf = newSessionToken();
-  await db.query('DELETE FROM admin_sessions WHERE expires_at <= now()');
-  await db.query(
-    'INSERT INTO admin_sessions(token_hash,csrf_token_hash,user_id,expires_at) VALUES($1,$2,$3,now()+($4::text || \' hours\')::interval)',
-    [hashToken(token), hashToken(csrf), userId, String(config.SESSION_TTL_HOURS)]
-  );
-  return { token, csrf };
 }
 
 async function createRewardForEvent(client, { request, event, object, idempotencyKey }) {
@@ -276,6 +263,12 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
     return { member:{ id:updated.user_id,role:updated.role,status:updated.status } };
   });
 
+  app.post('/api/v1/organization/members/:userId/account-status',async(request,reply)=>{if(config.AUTH_MODE!=="local")return reply.code(404).send({code:"NOT_FOUND",message:"Route not found"});requireCapability(request.principal,"members:manage");const userId=z.string().uuid().parse(request.params.userId),body=z.object({status:z.enum(["ACTIVE","DISABLED"]),auditReason:z.string().trim().min(3).max(500)}).parse(request.body);if(userId===request.principal.id)return reply.code(409).send({code:"SELF_FREEZE_FORBIDDEN",message:"Administrators cannot change their own account status"});const key=parseIdempotencyKey(request),operation="MEMBER_ACCOUNT_STATUS",hash=requestHash(operation,{userId,...body});const response=await inTransaction(db,async client=>{await lockIdempotencyKey(client,request.principal.tenantId,key);const cached=await getIdempotentResponse(client,request.principal.tenantId,key,hash);if(cached)return cached;const changed=await changeMemberAccountStatus(client,{tenantId:request.principal.tenantId,organizationId:request.principal.organizationId,userId,actorId:request.principal.id,status:body.status,reason:body.auditReason});await audit(client,request,body.status==="DISABLED"?"MEMBER_ACCOUNT_FROZEN":"MEMBER_ACCOUNT_UNFROZEN","LOCAL_USER",userId,changed.before,changed.after);const value={member:changed.after};await saveIdempotentResponse(client,{tenantId:request.principal.tenantId,key,operation,hash,status:200,body:value});return{status:200,body:value};});return reply.code(response.status).send(response.body);});
+
+  app.get('/api/v1/security/authentication-events',async(request)=>{requireCapability(request.principal,'members:manage');const query=z.object({riskLevel:z.enum(['LOW','MEDIUM','HIGH']).optional(),limit:z.coerce.number().int().min(1).max(200).default(100)}).parse(request.query);const result=await db.query(`SELECT e.id,e.user_id,u.username,e.event_type,e.auth_method,e.risk_level,e.user_agent,e.actor_id,e.reason,e.metadata,e.created_at
+    FROM authentication_events e LEFT JOIN local_users u ON u.id=e.user_id AND u.tenant_id=e.tenant_id
+    WHERE e.tenant_id=$1 AND ($2::text IS NULL OR e.risk_level=$2) ORDER BY e.created_at DESC,e.id DESC LIMIT $3`,[request.principal.tenantId,query.riskLevel||null,query.limit]);return{items:result.rows};});
+
   app.post('/api/auth/invitations/accept', async (request, reply) => {
     if (config.AUTH_MODE !== 'local') return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
     const body=z.object({
@@ -315,7 +308,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       return { user:{ id:userId,name:username,email,role:invitation.role,capabilities:ROLE_CAPABILITIES[invitation.role],tenantId:invitation.tenant_id,organizationId:invitation.organization_id,organizationName:invitation.organization_name } };
     });
     if (result.error) return reply.code(result.error.status).send({ code:result.error.code,message:result.error.message });
-    const session=await createSession(db,config,result.user.id);
+    const session=await createLocalSession(db,config,{userId:result.user.id,tenantId:result.user.tenantId,request,authMethod:"PASSWORD"});
     reply.header('set-cookie',sessionCookies(config,session.token,session.csrf));
     return { authenticated:true,csrfToken:session.csrf,user:result.user,invitationAccepted:true };
   });
@@ -351,7 +344,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
     });
     if (created.duplicate) return reply.code(409).send({ code:'ACCOUNT_EXISTS', message:'Username or email is already registered' });
     loginAttempts.delete(key);
-    const session=await createSession(db,config,user.id);
+    const session=await createLocalSession(db,config,{userId:user.id,tenantId:user.tenantId,request,authMethod:"PASSWORD"});
     reply.header('set-cookie',sessionCookies(config,session.token,session.csrf));
     return reply.code(201).send({ authenticated:true,csrfToken:session.csrf,user:{ id:user.id,name:user.username,email:user.email,role:'BRAND_ADMIN',capabilities:ROLE_CAPABILITIES.BRAND_ADMIN,tenantId:user.tenantId,organizationId:user.organizationId,organizationName:created.organizationName } });
   });
@@ -379,10 +372,10 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       return reply.code(401).send({ code:'INVALID_CREDENTIALS', message:'Invalid username or password' });
     }
     loginAttempts.delete(key);
-    const session=await createSession(db,config,user?.id || null);
+    const session=await createLocalSession(db,config,{userId:user?.id||null,tenantId:user?.tenant_id||config.ADMIN_TENANT_ID,request,authMethod:"PASSWORD"});
     reply.header('set-cookie',sessionCookies(config,session.token,session.csrf));
     const role=String(user?.role || 'PLATFORM_OPERATOR').toUpperCase();
-    return { authenticated:true, csrfToken:session.csrf, user:{ id:user?.id || 'local-admin', name:user?.username || config.ADMIN_USERNAME, email:user?.email || null, role, capabilities:ROLE_CAPABILITIES[role] || ROLE_CAPABILITIES.PLATFORM_OPERATOR, tenantId:user?.tenant_id || config.ADMIN_TENANT_ID, organizationId:user?.organization_id || config.ADMIN_ORGANIZATION_ID } };
+    return { authenticated:true, csrfToken:session.csrf, riskLevel:session.riskLevel, user:{ id:user?.id || 'local-admin', name:user?.username || config.ADMIN_USERNAME, email:user?.email || null, role, capabilities:ROLE_CAPABILITIES[role] || ROLE_CAPABILITIES.PLATFORM_OPERATOR, tenantId:user?.tenant_id || config.ADMIN_TENANT_ID, organizationId:user?.organization_id || config.ADMIN_ORGANIZATION_ID } };
   });
 
   app.get('/api/auth/session', async (request, reply) => {
@@ -395,11 +388,12 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       const secure = config.SESSION_COOKIE_SECURE ? '; Secure' : '';
       reply.header('set-cookie', config.CSRF_COOKIE_NAME + '=' + csrfToken + '; Path=/; SameSite=Strict; Max-Age=' + (config.SESSION_TTL_HOURS * 3600) + secure);
     }
+    const rotated=await rotateLocalSession(db,config,request,reply);if(rotated)csrfToken=rotated.csrf;
     return { authenticated:true, csrfToken, user:sessionUser(request.principal) };
   });
 
   app.post('/api/auth/logout', async (request, reply) => {
-    if (request.authSession?.token_hash) await db.query('DELETE FROM admin_sessions WHERE token_hash=$1', [request.authSession.token_hash]);
+    if (request.authSession?.token_hash) await inTransaction(db,async client=>{const revoked=await client.query("UPDATE admin_sessions SET revoked_at=now(),revoked_by=$2,revocation_reason='User logged out' WHERE token_hash=$1 AND revoked_at IS NULL RETURNING tenant_id,user_id",[request.authSession.token_hash,request.principal.id]);if(revoked.rows[0]?.user_id)await client.query(`INSERT INTO authentication_events(tenant_id,user_id,event_type,risk_level,actor_id,reason) VALUES($1,$2,'SESSION_REVOKED','LOW',$2,'User logged out')`,[revoked.rows[0].tenant_id,revoked.rows[0].user_id]);});
     const secure = config.SESSION_COOKIE_SECURE ? '; Secure' : '';
     reply.header('set-cookie', [config.SESSION_COOKIE_NAME + '=; Path=/; HttpOnly; SameSite=Strict; Max-Age=0' + secure, config.CSRF_COOKIE_NAME + '=; Path=/; SameSite=Strict; Max-Age=0' + secure]);
     return { authenticated:false };

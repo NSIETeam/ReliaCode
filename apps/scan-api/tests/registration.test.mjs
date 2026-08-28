@@ -34,7 +34,9 @@ function makeDb() {
         return membership ? { rowCount:1,rows:[{ organization_id:membership.organization_id,role:membership.role,organization_name:organization?.name||'ReliaCode' }] } : { rowCount:0,rows:[] };
       }
       if (sql.includes('DELETE FROM admin_sessions')) return { rowCount:0,rows:[] };
+      if (sql.includes('SELECT ip_hash,user_agent FROM admin_sessions')) return { rowCount:0,rows:[] };
       if (sql.includes('INSERT INTO admin_sessions')) { sessions.set(params[0],{ token_hash:params[0],csrf_token_hash:params[1],user_id:params[2],expires_at:new Date(Date.now()+3600000) }); return { rowCount:1,rows:[] }; }
+      if (sql.includes('INSERT INTO authentication_events')) return { rowCount:1,rows:[] };
       if (sql.includes('FROM admin_sessions WHERE token_hash=$1')) { const session=sessions.get(params[0]); return session ? { rowCount:1,rows:[session] } : { rowCount:0,rows:[] }; }
       if (sql.includes('FROM local_organization_workspaces')) return { rowCount:0,rows:[] };
       throw new Error(`Unexpected SQL: ${sql}`);

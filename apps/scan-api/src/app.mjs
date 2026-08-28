@@ -12,6 +12,7 @@ import { registerSupplyChainRoutes } from "./supply-chain-routes.mjs";
 import { registerWebhookRoutes } from "./webhook-routes.mjs";
 import { REQUIRED_SCHEMA_VERSION } from "./schema-version.mjs";
 import { observeHttpRequest, renderMetrics } from "./metrics.mjs";
+import { rotateLocalSession } from "./session-security.mjs";
 
 export async function buildApp({ config, db }) {
   const app = Fastify({
@@ -33,7 +34,8 @@ export async function buildApp({ config, db }) {
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id", "X-ReliaCode-Principal", "X-CSRF-Token"]
+    allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id", "X-ReliaCode-Principal", "X-CSRF-Token"],
+    exposedHeaders:["X-Request-Id","X-CSRF-Token"]
   });
   await app.register(rateLimit, { max: 300, timeWindow: "1 minute", ban: 3, keyGenerator: (request) => request.ip });
 
@@ -64,6 +66,7 @@ export async function buildApp({ config, db }) {
           if(Number(passkeys.rows[0]?.count||0)<2)return reply.code(428).send({code:"ADMIN_PASSKEYS_REQUIRED",message:"Administrators must register at least two Passkeys before sensitive operations",requestId:request.id});
         }
       }
+      if(pathname!=="/api/auth/session")await rotateLocalSession(db,config,request,reply);
       return;
     }
     const scope = await db.query(

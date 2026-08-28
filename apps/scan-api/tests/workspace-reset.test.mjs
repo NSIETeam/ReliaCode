@@ -24,6 +24,8 @@ function makeDb() {
     },
     async transaction(work) {
       const client = { query:async (sql, params=[]) => {
+        if (sql.includes('DELETE FROM admin_sessions')) return { rowCount:0,rows:[] };
+        if (sql.includes('INSERT INTO admin_sessions')) { session={ token_hash:params[0],csrf_token_hash:params[1] };return { rowCount:1,rows:[] }; }
         if (sql.includes('SELECT workspace,version,updated_at FROM admin_workspaces')) return workspace ? { rowCount:1, rows:[workspace] } : { rowCount:0, rows:[] };
         if (sql.includes('UPDATE admin_workspaces SET')) {
           workspace = { workspace:params[0], version:workspace.version+1, updated_at:'2026-08-26T01:00:00.000Z' };

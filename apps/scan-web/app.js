@@ -84,6 +84,7 @@ let persistenceTick = null;
 const apiUrl = (path) => apiBaseUrl + path;
 async function serverRequest(path, options={}) {
   const response = await fetch(apiUrl(path), { credentials:"include", ...options, headers:{ Accept:"application/json", ...(options.body?{"Content-Type":"application/json"}:{}), ...(options.headers||{}) } });
+  const rotatedCsrf=response.headers.get("x-csrf-token");if(rotatedCsrf)csrfToken=rotatedCsrf;
   const body = await response.json().catch(()=>({}));
   if (!response.ok) { const error = new Error(body.message || ("Request failed (" + response.status + ")")); error.status=response.status; error.body=body; throw error; }
   return body;

@@ -31,6 +31,8 @@ const schema = z.object({
   SESSION_COOKIE_SECURE: boolean.default(true),
   ALLOW_INSECURE_HTTP: boolean.default(false),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
+  SESSION_ROTATION_MINUTES: z.coerce.number().int().min(5).max(1440).default(15),
+  SESSION_FINGERPRINT_KEY: z.string().min(43).optional(),
   TRUST_PROXY: boolean.default(false),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   OPEN_EPCIS_BASE_URL: z.string().url().optional(),
@@ -74,6 +76,8 @@ export function loadConfig(env = process.env) {
   if (config.NODE_ENV === "production" && config.AUTH_MODE === "local" && !config.SESSION_COOKIE_SECURE && !config.ALLOW_INSECURE_HTTP) {
     throw new Error("SESSION_COOKIE_SECURE=false requires ALLOW_INSECURE_HTTP=true in production");
   }
+  if(config.SESSION_FINGERPRINT_KEY){const fingerprintKey=Buffer.from(config.SESSION_FINGERPRINT_KEY,"base64url");if(fingerprintKey.length!==32||fingerprintKey.toString("base64url")!==config.SESSION_FINGERPRINT_KEY)throw new Error("SESSION_FINGERPRINT_KEY must be a canonical base64url-encoded 32-byte key");}
+  if(config.NODE_ENV==="production"&&config.AUTH_MODE==="local"&&!config.SESSION_FINGERPRINT_KEY)throw new Error("SESSION_FINGERPRINT_KEY is required when AUTH_MODE=local in production");
   if (config.AUTH_MODE === "oidc" && !config.OIDC_ISSUER_URL) {
     throw new Error("OIDC_ISSUER_URL is required when AUTH_MODE=oidc");
   }

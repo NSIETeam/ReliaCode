@@ -34,6 +34,8 @@ function makeDb() {
     async transaction(work) {
       const client={ query:async (sql, params=[]) => {
         queries.push({ sql, params });
+        if (sql.includes('DELETE FROM admin_sessions')) return { rowCount:0, rows:[] };
+        if (sql.includes('INSERT INTO admin_sessions')) { session={ token_hash:params[0],csrf_token_hash:params[1] };return { rowCount:1,rows:[] }; }
         if (sql.includes('INSERT INTO admin_workspaces')) return { rowCount:1, rows:[{ workspace, version:0, updated_at:'2026-08-26T00:00:00.000Z' }] };
         if (sql.includes('DELETE FROM admin_public_objects')) return { rowCount:1, rows:[] };
         if (sql.includes('INSERT INTO admin_public_objects')) return { rowCount:1, rows:[] };
@@ -63,7 +65,7 @@ test('workspace projection encodes event arrays as JSONB strings', async (t) => 
 });
 
 test('production insecure HTTP bootstrap does not emit HSTS', async (t) => {
-  const config=loadConfig({ NODE_ENV:'production', DATABASE_URL:'postgres://unused', AUTH_MODE:'local', ADMIN_PASSWORD_HASH:hashPassword('secret'), SESSION_COOKIE_SECURE:'false', ALLOW_INSECURE_HTTP:'true', CORS_ORIGINS:'http://8.140.52.117', LOG_LEVEL:'silent' });
+  const config=loadConfig({ NODE_ENV:'production', DATABASE_URL:'postgres://unused', AUTH_MODE:'local', ADMIN_PASSWORD_HASH:hashPassword('secret'), SESSION_COOKIE_SECURE:'false', ALLOW_INSECURE_HTTP:'true', CORS_ORIGINS:'http://8.140.52.117', SESSION_FINGERPRINT_KEY:Buffer.alloc(32,4).toString('base64url'), LOG_LEVEL:'silent' });
   const app=await buildApp({ config, db:{ query:async () => ({ rowCount:1, rows:[{ current:true }] }) } });
   t.after(() => app.close());
   const response=await app.inject({ method:'GET', url:'/health/live' });
