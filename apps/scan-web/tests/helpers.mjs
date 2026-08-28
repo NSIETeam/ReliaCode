@@ -1,11 +1,13 @@
 import { chromium } from "playwright";
 
+export const testBaseUrl=(process.env.RELIACODE_TEST_BASE_URL || "http://localhost:4173").replace(/\/$/,"");
+
 export async function openApp(viewport={width:1280,height:900}) {
   const executablePath=process.env.PLAYWRIGHT_CHROME_PATH || (process.platform==="win32" ? "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe" : undefined);
   const browser=await chromium.launch({...(executablePath?{executablePath}:{}),headless:true});
   const context=await browser.newContext({viewport,acceptDownloads:true});
   const page=await context.newPage();
-  await page.goto("http://localhost:4173",{waitUntil:"networkidle"});
+  await page.goto(testBaseUrl,{waitUntil:"networkidle"});
   return {browser,context,page};
 }
 

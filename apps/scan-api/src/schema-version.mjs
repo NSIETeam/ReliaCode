@@ -1,1 +1,1 @@
-export const REQUIRED_SCHEMA_VERSION = "011_saas_core.sql";
+export const REQUIRED_SCHEMA_VERSION = "012_webhook_delivery_runtime.sql";

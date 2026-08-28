@@ -39,6 +39,7 @@ const schema = z.object({
   WEBAUTHN_RP_ID: z.string().min(1).optional(),
   WEBAUTHN_ORIGIN: z.string().url().optional(),
   METRICS_BEARER_TOKEN: z.string().min(32).optional(),
+  WEBHOOK_ENCRYPTION_KEY: z.string().min(43).optional(),
   APP_VERSION: z.string().min(1).max(100).default("development"),
   GIT_SHA: z.string().min(1).max(100).default("unknown")
 });
@@ -50,6 +51,10 @@ export function loadConfig(env = process.env) {
     throw new Error(`Invalid configuration: ${details}`);
   }
   const config = result.data;
+  if (config.WEBHOOK_ENCRYPTION_KEY) {
+    const webhookKey=Buffer.from(config.WEBHOOK_ENCRYPTION_KEY, "base64url");
+    if (webhookKey.length !== 32 || webhookKey.toString("base64url") !== config.WEBHOOK_ENCRYPTION_KEY) throw new Error("WEBHOOK_ENCRYPTION_KEY must be a canonical base64url-encoded 32-byte key");
+  }
   const databaseUrl = config.DATABASE_URL || (config.DATABASE_URL_FILE ? readFileSync(config.DATABASE_URL_FILE, "utf8").trim() : "");
   if (!databaseUrl) throw new Error("DATABASE_URL or DATABASE_URL_FILE is required");
   if (config.NODE_ENV === "production" && !["oidc", "local"].includes(config.AUTH_MODE)) {

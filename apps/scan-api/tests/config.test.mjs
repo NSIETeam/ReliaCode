@@ -31,3 +31,9 @@ test("production disables direct tenant registration by default", () => {
   assert.equal(config.ALLOW_PUBLIC_REGISTRATION,false);
   assert.equal(config.ENABLE_LEGACY_SYNC_CODE_GENERATION,false);
 });
+
+test("webhook encryption key must decode to exactly 32 bytes", () => {
+  assert.throws(() => loadConfig({ DATABASE_URL:"postgres://db", AUTH_MODE:"development", WEBHOOK_ENCRYPTION_KEY:"x".repeat(44) }), /32-byte key/);
+  const config=loadConfig({ DATABASE_URL:"postgres://db", AUTH_MODE:"development", WEBHOOK_ENCRYPTION_KEY:Buffer.alloc(32,7).toString("base64url") });
+  assert.equal(Buffer.from(config.WEBHOOK_ENCRYPTION_KEY,"base64url").length,32);
+});

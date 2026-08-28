@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import jsQR from "jsqr";
-import { addProduct, initialize, openApp } from "./helpers.mjs";
+import { addProduct, initialize, openApp, testBaseUrl } from "./helpers.mjs";
 
 function decodeMatrix(matrix) {
   const quiet=4,scale=8,modules=matrix.length+quiet*2,size=modules*scale,pixels=new Uint8ClampedArray(size*size*4).fill(255);
@@ -33,7 +33,7 @@ assert.equal(Object.keys(stored.objects).length,3);
 assert.equal(new Set(Object.keys(stored.objects)).size,3);
 const firstCode=Object.keys(stored.objects)[0];
 const firstObject=stored.objects[firstCode];
-const expectedVerificationUrl=`http://localhost:4173/?verify=${firstObject.publicId}`;
+const expectedVerificationUrl=`${testBaseUrl}/?verify=${firstObject.publicId}`;
 const matrix=await page.evaluate((code)=>qrMatrix(verificationUrl(object(code))),firstCode);
 assert.equal(decodeMatrix(matrix)?.data,expectedVerificationUrl,"exported QR matrix must decode to the public verification URL");
 const publicContext=await browser.newContext();

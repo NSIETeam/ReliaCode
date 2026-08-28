@@ -11,6 +11,7 @@
     "start": "node src/server.mjs",
     "worker": "node src/outbox-worker.mjs",
     "worker:codes": "node src/code-job-worker.mjs",
+    "worker:webhooks": "node src/webhook-worker.mjs",
     "migrate": "node src/migrate.mjs",
     "test": "node --test tests/*.test.mjs"
   },

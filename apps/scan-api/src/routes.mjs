@@ -5,6 +5,7 @@ import { eventCapability, nextObjectStatus, verificationForEvent } from "./domai
 import { getIdempotentResponse, lockIdempotencyKey, requestHash, saveIdempotentResponse } from "./idempotency.mjs";
 import { codeBatchSchema, parseIdempotencyKey, riskDecisionSchema, traceEventSchema } from "./schemas.mjs";
 import { evaluateEntitlements, getPlan } from "./entitlements.mjs";
+import { enqueueWebhookDeliveries } from "./webhooks.mjs";
 
 function audit(client, request, action, entityType, entityId, beforeState, afterState) {
   const principal = request.principal;
@@ -683,6 +684,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
            VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[request.principal.tenantId,relationshipParent,object.id,body.eventType==="PACKING"?"ADD":"DELETE",body.documentId,event.rows[0].id,request.principal.id,body.eventTime]);
         }
       }
+      if(body.eventType!=="VERIFY")await enqueueWebhookDeliveries(client,request.principal.tenantId,body.eventType,{eventId:event.rows[0].id,eventType:body.eventType,eventTime:body.eventTime,object:{code:object.code,level:object.level,status:nextStatus},verificationStatus:verification.status});
       let riskCase = null;
       if (verification.risk) {
         const risk = await client.query(

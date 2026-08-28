@@ -22,6 +22,7 @@ services:
       WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?WEBAUTHN_RP_ID is required}
       WEBAUTHN_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
       METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN:?METRICS_BEARER_TOKEN is required}
+      WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:?WEBHOOK_ENCRYPTION_KEY is required}
     secrets: [database_url]
     restart: "no"
 
@@ -56,6 +57,17 @@ services:
   code-worker:
     image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
     command: ["src/code-job-worker.mjs"]
+    environment:
+      <<: *api_environment
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}
+    secrets: [database_url]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  webhook-worker:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    command: ["src/webhook-worker.mjs"]
     environment:
       <<: *api_environment
       DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}

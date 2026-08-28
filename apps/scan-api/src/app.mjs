@@ -9,6 +9,7 @@ import { registerRoutes } from "./routes.mjs";
 import { registerSaasRoutes } from "./saas-routes.mjs";
 import { registerPasskeyRoutes } from "./passkey-routes.mjs";
 import { registerSupplyChainRoutes } from "./supply-chain-routes.mjs";
+import { registerWebhookRoutes } from "./webhook-routes.mjs";
 import { REQUIRED_SCHEMA_VERSION } from "./schema-version.mjs";
 import { observeHttpRequest, renderMetrics } from "./metrics.mjs";
 
@@ -105,6 +106,7 @@ export async function buildApp({ config, db }) {
   registerSaasRoutes(app, { db, config });
   registerPasskeyRoutes(app, { db, config });
   registerSupplyChainRoutes(app, { db, config });
+  registerWebhookRoutes(app, { db, config });
 
   app.setNotFoundHandler((request, reply) => reply.code(404).send({ code:"NOT_FOUND", message:"Route not found", requestId:request.id }));
   app.setErrorHandler((error, request, reply) => {
