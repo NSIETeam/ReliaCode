@@ -32,6 +32,7 @@ const schema = z.object({
   ALLOW_INSECURE_HTTP: boolean.default(false),
   SESSION_TTL_HOURS: z.coerce.number().int().min(1).max(720).default(24),
   SESSION_ROTATION_MINUTES: z.coerce.number().int().min(5).max(1440).default(15),
+  PASSKEY_STEP_UP_MINUTES: z.coerce.number().int().min(1).max(60).default(10),
   SESSION_FINGERPRINT_KEY: z.string().min(43).optional(),
   SMTP_URL: z.string().min(1).optional(),
   SMTP_URL_FILE: z.string().min(1).optional(),

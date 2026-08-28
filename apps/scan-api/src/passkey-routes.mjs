@@ -34,6 +34,32 @@ export function registerPasskeyRoutes(app,{db,config}){
     const body=z.object({challenge:z.string().min(20),response:z.record(z.string(),z.unknown())}).parse(request.body);const wc=webauthnConfig(config);
     const authenticated=await db.transaction(async(client)=>{const challenge=await consumeChallenge(client,body.challenge,"AUTHENTICATION");if(!challenge.user_id)throw Object.assign(new Error("Passkey authentication failed"),{statusCode:401,code:"INVALID_CREDENTIALS"});const credential=await client.query(`SELECT c.*,u.status user_status,u.tenant_id FROM webauthn_credentials c JOIN local_users u ON u.id=c.user_id WHERE c.id=$1 AND c.user_id=$2`,[body.response.id,challenge.user_id]);if(!credential.rowCount||credential.rows[0].user_status!=="ACTIVE")throw Object.assign(new Error("Passkey authentication failed"),{statusCode:401,code:"INVALID_CREDENTIALS"});const row=credential.rows[0];const verification=await verifyAuthenticationResponse({response:body.response,expectedChallenge:body.challenge,expectedOrigin:wc.origin,expectedRPID:wc.rpID,credential:{id:row.id,publicKey:new Uint8Array(row.public_key),counter:Number(row.counter),transports:row.transports},requireUserVerification:true});if(!verification.verified)throw Object.assign(new Error("Passkey authentication failed"),{statusCode:401,code:"INVALID_CREDENTIALS"});await client.query("UPDATE webauthn_credentials SET counter=$1,last_used_at=now() WHERE id=$2",[verification.authenticationInfo.newCounter,row.id]);return{userId:row.user_id,tenantId:row.tenant_id};});const created=await createLocalSession(db,config,{...authenticated,request,authMethod:"PASSKEY"});reply.header("set-cookie",sessionCookies(config,created.token,created.csrf));return{authenticated:true,csrfToken:created.csrf,riskLevel:created.riskLevel};
   });
+  app.post("/api/auth/passkeys/step-up/options",{config:{rateLimit:{max:20,timeWindow:"5 minutes"}}},async(request)=>{
+    if(config.AUTH_MODE!=="local")throw Object.assign(new Error("Route not found"),{statusCode:404,code:"NOT_FOUND"});
+    const credentials=await db.query("SELECT id,transports FROM webauthn_credentials WHERE user_id=$1",[request.principal.id]);
+    if(!credentials.rowCount)throw Object.assign(new Error("Passkey is required"),{statusCode:428,code:"PASSKEY_REQUIRED"});
+    const wc=webauthnConfig(config),options=await generateAuthenticationOptions({rpID:wc.rpID,userVerification:"required",allowCredentials:credentials.rows.map(row=>({id:row.id,transports:row.transports}))});
+    await storeChallenge(db,{challenge:options.challenge,userId:request.principal.id,purpose:"STEP_UP"});
+    return options;
+  });
+  app.post("/api/auth/passkeys/step-up/verify",{config:{rateLimit:{max:20,timeWindow:"5 minutes"}}},async(request)=>{
+    if(config.AUTH_MODE!=="local")throw Object.assign(new Error("Route not found"),{statusCode:404,code:"NOT_FOUND"});
+    const body=z.object({challenge:z.string().min(20),response:z.record(z.string(),z.unknown())}).parse(request.body),wc=webauthnConfig(config);
+    const verifiedAt=await db.transaction(async client=>{
+      const challenge=await consumeChallenge(client,body.challenge,"STEP_UP");
+      if(String(challenge.user_id)!==request.principal.id)throw Object.assign(new Error("Passkey challenge belongs to another user"),{statusCode:404,code:"NOT_FOUND"});
+      const credential=await client.query("SELECT id,public_key,counter,transports FROM webauthn_credentials WHERE id=$1 AND user_id=$2",[body.response.id,request.principal.id]);
+      if(!credential.rowCount)throw Object.assign(new Error("Passkey verification failed"),{statusCode:401,code:"INVALID_CREDENTIALS"});
+      const row=credential.rows[0],verification=await verifyAuthenticationResponse({response:body.response,expectedChallenge:body.challenge,expectedOrigin:wc.origin,expectedRPID:wc.rpID,credential:{id:row.id,publicKey:new Uint8Array(row.public_key),counter:Number(row.counter),transports:row.transports},requireUserVerification:true});
+      if(!verification.verified)throw Object.assign(new Error("Passkey verification failed"),{statusCode:401,code:"INVALID_CREDENTIALS"});
+      await client.query("UPDATE webauthn_credentials SET counter=$1,last_used_at=now() WHERE id=$2",[verification.authenticationInfo.newCounter,row.id]);
+      const updated=await client.query("UPDATE admin_sessions SET passkey_verified_at=now() WHERE token_hash=$1 AND user_id=$2 AND revoked_at IS NULL RETURNING passkey_verified_at",[request.authSession.token_hash,request.principal.id]);
+      if(!updated.rowCount)throw Object.assign(new Error("Session is no longer active"),{statusCode:401,code:"UNAUTHORIZED"});
+      return updated.rows[0].passkey_verified_at;
+    });
+    request.authSession.passkey_verified_at=verifiedAt;
+    return{verified:true,verifiedAt,expiresAt:new Date(new Date(verifiedAt).getTime()+config.PASSKEY_STEP_UP_MINUTES*60_000).toISOString()};
+  });
   app.post("/api/auth/recovery-codes",async(request,reply)=>{
     const body=z.object({reason:z.string().trim().min(3).max(500)}).parse(request.body);const codes=Array.from({length:10},()=>randomBytes(9).toString("base64url").toUpperCase());await db.transaction(async(client)=>{await client.query("DELETE FROM account_recovery_codes WHERE user_id=$1",[request.principal.id]);for(const code of codes)await client.query("INSERT INTO account_recovery_codes(user_id,code_hash) VALUES($1,$2)",[request.principal.id,hashToken(code)]);await client.query(`INSERT INTO audit_log(tenant_id,actor_id,actor_role,organization_id,action,entity_type,entity_id,request_id,after_state) VALUES($1,$2,$3,$4,'RECOVERY_CODES_ROTATED','LOCAL_USER',$2,$5,$6)`,[request.principal.tenantId,request.principal.id,request.principal.role,request.principal.organizationId,request.id,{reason:body.reason,count:codes.length}]);});return reply.code(201).send({codes});
   });

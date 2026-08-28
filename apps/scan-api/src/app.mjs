@@ -17,6 +17,11 @@ import { registerRecoveryRoutes } from "./recovery-routes.mjs";
 import { registerManualRecoveryRoutes } from "./manual-recovery-routes.mjs";
 import { runWithDatabaseContext,useTenantDatabaseContext,useSystemDatabaseContext } from "./database-context.mjs";
 
+export function hasFreshPasskeyVerification(session,minutes,now=Date.now()) {
+  const verifiedAt=Date.parse(String(session?.passkey_verified_at||""));
+  return Number.isFinite(verifiedAt) && verifiedAt<=now && now-verifiedAt<=minutes*60_000;
+}
+
 export async function buildApp({ config, db }) {
   const app = Fastify({
     logger: { level: config.LOG_LEVEL, redact: ["req.headers.authorization", "req.headers.cookie", "req.body.password", "req.body.newPassword", "req.body.token", "req.body.credential", "request.body.password", "request.body.newPassword", "request.body.token", "request.body.credential"] },
@@ -70,6 +75,7 @@ export async function buildApp({ config, db }) {
         if (pathname.startsWith("/api/v1/") && ["BRAND_ADMIN","TENANT_OWNER"].includes(request.principal.role) && request.principal.id !== "local-admin") {
           const passkeys=await db.query("SELECT count(*)::int count FROM webauthn_credentials WHERE user_id=$1",[request.principal.id]);
           if(Number(passkeys.rows[0]?.count||0)<2)return reply.code(428).send({code:"ADMIN_PASSKEYS_REQUIRED",message:"Administrators must register at least two Passkeys before sensitive operations",requestId:request.id});
+          if(!hasFreshPasskeyVerification(request.authSession,config.PASSKEY_STEP_UP_MINUTES))return reply.code(428).send({code:"PASSKEY_STEP_UP_REQUIRED",message:"A recent Passkey verification is required for this operation",requestId:request.id});
         }
       }
       if(pathname!=="/api/auth/session")await rotateLocalSession(db,config,request,reply);
