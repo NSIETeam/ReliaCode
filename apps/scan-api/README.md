@@ -24,6 +24,8 @@ npm start
 
 状态变化事件必须引用已批准或执行中的业务单据。单据在 `DRAFT` 状态通过 `POST /api/v1/documents/:id/objects` 添加预期序列对象，通过 `DELETE /api/v1/documents/:id/objects/:objectId` 删除误录明细；每条明细保存加入当时的对象快照，且两种修改均要求幂等键和审计理由。空单据不能审批，审批后明细被冻结；事件对象不在单据中或被标记为非预期时返回 `OBJECT_NOT_ON_DOCUMENT`，不会写入追溯事件。跨租户单据、对象和明细统一按不存在处理。
 
+单据明细以 `ACTION` 和 `CONTEXT` 区分待执行对象与仅用于授权/证明包装关系的对象。审批至少要求一条预期 `ACTION` 行；已验证的状态事件原子写回 `fulfilled_event_id/fulfilled_at`，并在首条履约时把 `APPROVED` 单据推进到 `IN_PROGRESS`。同一动作行不能重复消费，任何预期动作行尚未履约时禁止将单据标记为 `COMPLETED`。包装父箱通常应录为 `CONTEXT`，子件或本次箱级动作的根对象录为 `ACTION`。
+
 对 CASE/PALLET 执行发货、收货、退货或销毁时，API 使用递归查询在同一事务中锁定当前包装树，逐个验证子件状态迁移并原子更新全部子件。每次事件都会写入追加式 `trace_event_object_snapshots`，保存当时每个对象的层级、直接父对象、原状态、结果状态和最小对象快照；因此后续拆箱、换箱不会改写历史事件看到的包装关系。任何一个子件不能完成迁移时整次箱级动作失败，不产生部分流转。
 
 装箱和拆箱同时校验子件与父包装都列在同一已批准包装单据上，拆箱会在写事件前锁定并验证当前父对象。OpenEPCIS outbox 对这两类动作输出标准 `AggregationEvent`，分别使用 `ADD` 和 `DELETE`，明确保存 `parentID` 与 `childEPCs`；其他物流动作继续输出 `ObjectEvent`。

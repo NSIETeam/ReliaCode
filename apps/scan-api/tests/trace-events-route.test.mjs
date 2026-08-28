@@ -8,7 +8,7 @@ const principal=JSON.stringify({sub:ids.user,tenant_id:ids.tenant,organization_i
 const deviceToken="route-test-device-token-0123456789abcdef";
 const config=loadConfig({NODE_ENV:"test",DATABASE_URL:"postgres://unused",AUTH_MODE:"development",CORS_ORIGINS:"http://localhost:4173",LOG_LEVEL:"silent",REQUIRE_DEVICE_AUTHORIZATION:"true"});
 
-function database({documentObject=true,rootLevel="ITEM",rootParentId=null,descendants=[],documentType="SHIPMENT",eventType="SHIPPING",parentRows=[]}={}){
+function database({documentObject=true,documentLineRole="ACTION",rootLevel="ITEM",rootParentId=null,descendants=[],documentType="SHIPMENT",eventType="SHIPPING",parentRows=[]}={}){
   const calls=[];
   const client={query:async(sql,params=[])=>{
     calls.push({sql,params});
@@ -17,7 +17,7 @@ function database({documentObject=true,rootLevel="ITEM",rootParentId=null,descen
     if(sql.includes("FROM serialized_objects so JOIN products"))return{rowCount:1,rows:[{id:ids.object,tenant_id:ids.tenant,product_id:ids.product,code:"010691234567890210LOT-A21SERIAL-1",level:rootLevel,status:rootParentId?"PACKED":"COMMISSIONED",parent_id:rootParentId,current_organization_id:ids.organization,sku:"SKU-1",gtin:"06912345678902",product_name:"Test product"}]};
     if(sql.includes("WITH RECURSIVE tree AS"))return{rowCount:descendants.length,rows:descendants};
     if(sql.includes("FROM business_documents"))return{rowCount:1,rows:[{id:ids.document,tenant_id:ids.tenant,document_type:documentType,status:"APPROVED",from_organization_id:ids.organization,to_organization_id:ids.destination}]};
-    if(sql.includes("FROM business_document_objects"))return documentObject?{rowCount:1,rows:[{expected:true,object_snapshot:{id:ids.object}}]}:{rowCount:0,rows:[]};
+    if(sql.includes("FROM business_document_objects"))return documentObject?{rowCount:1,rows:[{expected:true,line_role:documentLineRole,fulfilled_event_id:null,object_snapshot:{id:ids.object}}]}:{rowCount:0,rows:[]};
     if(sql.includes("SELECT * FROM serialized_objects WHERE tenant_id=$1 AND (id=$2 OR code=$3)"))return{rowCount:parentRows.length,rows:parentRows};
     if(sql.includes("INSERT INTO trace_events"))return{rowCount:1,rows:[{id:ids.event,event_type:eventType,event_time:"2026-08-28T09:00:00.000Z",read_point:"https://id.gs1.org/414/6901234567892",organization_id:ids.organization,verification_status:"VERIFIED"}]};
     return{rowCount:1,rows:[{}]};
@@ -45,6 +45,9 @@ test("state-changing trace route authorizes the device and enforces document mem
   const snapshotCall=db.calls.find(call=>call.sql.includes("INSERT INTO trace_event_object_snapshots"));
   assert.equal(JSON.parse(snapshotCall.params[2]).length,1);
   assert.ok(db.calls.indexOf(deviceCall)<db.calls.indexOf(eventCall));
+  const fulfillment=db.calls.find(call=>call.sql.includes("UPDATE business_document_objects SET fulfilled_event_id"));
+  assert.deepEqual(fulfillment.params,[ids.event,"2026-08-28T09:00:00.000Z",ids.tenant,ids.document,ids.object]);
+  assert.ok(db.calls.some(call=>call.sql.includes("UPDATE business_documents SET status='IN_PROGRESS'")));
 });
 
 test("trace route rejects an object that is absent from the approved document",async t=>{
@@ -52,6 +55,13 @@ test("trace route rejects an object that is absent from the approved document",a
   const response=await app.inject(request());
   assert.equal(response.statusCode,409,response.body);
   assert.equal(response.json().code,"OBJECT_NOT_ON_DOCUMENT");
+  assert.equal(db.calls.some(call=>call.sql.includes("INSERT INTO trace_events")),false);
+});
+
+test("a context-only document line cannot be consumed as an action",async t=>{
+  const db=database({documentLineRole:"CONTEXT"}),app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject(request());
+  assert.equal(response.statusCode,409,response.body);assert.equal(response.json().code,"OBJECT_NOT_ACTIONABLE");
   assert.equal(db.calls.some(call=>call.sql.includes("INSERT INTO trace_events")),false);
 });
 

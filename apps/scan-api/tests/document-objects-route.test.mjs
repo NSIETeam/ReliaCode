@@ -7,12 +7,12 @@ const ids={tenant:"11111111-1111-4111-8111-111111111111",organization:"22222222-
 const headers={"x-reliacode-principal":JSON.stringify({sub:ids.user,tenant_id:ids.tenant,organization_id:ids.organization,role:"BRAND_ADMIN"}),"idempotency-key":"document-command-route-0001"};
 const config=loadConfig({NODE_ENV:"test",DATABASE_URL:"postgres://unused",AUTH_MODE:"development",CORS_ORIGINS:"http://localhost:4173",LOG_LEVEL:"silent"});
 
-function database({expectedCount=0}={}){
+function database({expectedCount=0,documentStatus="DRAFT",version=0}={}){
   const calls=[];
   const client={query:async(sql,params=[])=>{
     calls.push({sql,params});
     if(sql.includes("FROM idempotency_records"))return{rowCount:0,rows:[]};
-    if(sql.includes("SELECT * FROM business_documents"))return{rowCount:1,rows:[{id:ids.document,tenant_id:ids.tenant,status:"DRAFT",version:0}]};
+    if(sql.includes("SELECT * FROM business_documents"))return{rowCount:1,rows:[{id:ids.document,tenant_id:ids.tenant,status:documentStatus,version}]};
     if(sql.includes("count(*)::int count FROM business_document_objects"))return{rowCount:1,rows:[{count:expectedCount}]};
     if(sql.includes("DELETE FROM business_document_objects"))return{rowCount:1,rows:[{tenant_id:ids.tenant,document_id:ids.document,object_id:ids.object,expected:true}]};
     if(sql.includes("UPDATE business_documents"))return{rowCount:1,rows:[{id:ids.document,tenant_id:ids.tenant,status:"APPROVED",version:1}]};
@@ -37,4 +37,12 @@ test("draft document object removal is tenant scoped and audited",async t=>{
   const removal=db.calls.find(call=>call.sql.includes("DELETE FROM business_document_objects"));
   assert.deepEqual(removal.params,[ids.tenant,ids.document,ids.object]);
   assert.ok(db.calls.some(call=>call.sql.includes("INSERT INTO audit_log")));
+});
+
+test("a document with pending action objects cannot be completed",async t=>{
+  const db=database({expectedCount:2,documentStatus:"IN_PROGRESS",version:3}),app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject({method:"POST",url:`/api/v1/documents/${ids.document}/transition`,headers,payload:{expectedVersion:3,status:"COMPLETED",auditReason:"completion route gate"}});
+  assert.equal(response.statusCode,409,response.body);
+  assert.equal(response.json().code,"DOCUMENT_OBJECTS_PENDING");
+  assert.equal(db.calls.some(call=>call.sql.includes("UPDATE business_documents")),false);
 });

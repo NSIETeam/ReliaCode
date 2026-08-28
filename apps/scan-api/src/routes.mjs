@@ -637,8 +637,10 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
         const receiving=body.eventType.startsWith("RECEIVING_");
         const authorizedOrganization=receiving?businessDocument.to_organization_id:businessDocument.from_organization_id;
         if(authorizedOrganization&&authorizedOrganization!==request.principal.organizationId){const error=new Error("Business document does not authorize this organization");error.statusCode=404;error.code="DOCUMENT_NOT_FOUND";throw error;}
-        const documentObject=await client.query("SELECT expected,object_snapshot FROM business_document_objects WHERE tenant_id=$1 AND document_id=$2 AND object_id=$3",[request.principal.tenantId,body.documentId,object.id]);
+        const documentObject=await client.query("SELECT expected,line_role,fulfilled_event_id,object_snapshot FROM business_document_objects WHERE tenant_id=$1 AND document_id=$2 AND object_id=$3",[request.principal.tenantId,body.documentId,object.id]);
         if(!documentObject.rowCount||!documentObject.rows[0].expected){const error=new Error("The serialized object is not expected on this business document");error.statusCode=409;error.code="OBJECT_NOT_ON_DOCUMENT";throw error;}
+        if(documentObject.rows[0].line_role!=="ACTION"){const error=new Error("The serialized object is context-only on this business document");error.statusCode=409;error.code="OBJECT_NOT_ACTIONABLE";throw error;}
+        if(documentObject.rows[0].fulfilled_event_id){const error=new Error("The serialized object was already fulfilled on this business document");error.statusCode=409;error.code="OBJECT_ALREADY_PROCESSED";throw error;}
       }
       let shipment = null;
       if (body.shipmentId) {
@@ -723,6 +725,11 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
           const changes=body.eventType==="REPACKING"?[[previousParentObject.id,"DELETE"],[parentObject.id,"ADD"]]:[[parentObject.id,body.eventType==="PACKING"?"ADD":"DELETE"]];
           for(const [relationshipParent,action] of changes)await client.query(`INSERT INTO package_relationship_events(tenant_id,parent_object_id,child_object_id,action,business_document_id,trace_event_id,actor_id,occurred_at)
            VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[request.principal.tenantId,relationshipParent,object.id,action,body.documentId,event.rows[0].id,request.principal.id,body.eventTime]);
+        }
+        if(businessDocument){
+          const fulfilled=await client.query("UPDATE business_document_objects SET fulfilled_event_id=$1,fulfilled_at=$2 WHERE tenant_id=$3 AND document_id=$4 AND object_id=$5 AND expected AND line_role='ACTION' AND fulfilled_event_id IS NULL RETURNING object_id",[event.rows[0].id,body.eventTime,request.principal.tenantId,businessDocument.id,object.id]);
+          if(!fulfilled.rowCount){const error=new Error("The document object could not be fulfilled");error.statusCode=409;error.code="DOCUMENT_OBJECT_CONFLICT";throw error;}
+          await client.query("UPDATE business_documents SET status='IN_PROGRESS',version=version+1,updated_at=now() WHERE tenant_id=$1 AND id=$2 AND status='APPROVED'",[request.principal.tenantId,businessDocument.id]);
         }
       }
       if(body.eventType!=="VERIFY")await enqueueWebhookDeliveries(client,request.principal.tenantId,body.eventType,{eventId:event.rows[0].id,eventType:body.eventType,eventTime:body.eventTime,object:{code:object.code,level:object.level,status:effectiveStatus},verificationStatus:verification.status});
