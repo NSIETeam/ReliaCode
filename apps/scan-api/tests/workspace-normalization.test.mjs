@@ -27,6 +27,13 @@ test('invalid payloads are skipped and raw payload is not returned', () => {
   assert.equal(JSON.stringify(result).includes('do-not-log'), false);
 });
 
+test('legacy normalization rejects products with invalid GTIN check digits', () => {
+  const invalidProduct = { ...product, gtin:'06912345678901' };
+  const result = buildNormalizationPlan({ localOrganization:local, mapping, workspace:{ products:[invalidProduct], objects:{ [object.id]:object }, events:[] } });
+  assert.equal(result.statements.length, 0);
+  assert.equal(result.stats.skippedInvalid, 2);
+});
+
 test('unmapped workspace produces no writes and counts records', () => {
   const result = buildNormalizationPlan({ localOrganization:local, mapping:null, workspace:{ products:[product], objects:{ [object.id]:object }, events:[{}] } });
   assert.equal(result.statements.length, 0);

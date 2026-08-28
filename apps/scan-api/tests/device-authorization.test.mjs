@@ -33,6 +33,11 @@ test("production rejects locations without a GLN",async()=>{
   await assert.rejects(()=>authorizeOperationalDevice(client,{REQUIRE_DEVICE_AUTHORIZATION:true},request,"SHIPPING"),error=>error.code==="DEVICE_LOCATION_GLN_REQUIRED"&&error.statusCode===409);
 });
 
+test("production rejects a location whose GLN check digit is invalid",async()=>{
+  const client={query:async()=>({rowCount:1,rows:[{id:deviceId,location_id:locationId,gln:"6901234567891"}]})};
+  await assert.rejects(()=>authorizeOperationalDevice(client,{REQUIRE_DEVICE_AUTHORIZATION:true},request,"SHIPPING"),error=>error.code==="DEVICE_LOCATION_GLN_REQUIRED"&&error.statusCode===409);
+});
+
 test("device inventory never selects or returns credential hashes",async t=>{
   let inventorySql;
   const db={query:async sql=>{if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};if(sql.includes("FROM devices WHERE tenant_id")){inventorySql=sql;return{rowCount:1,rows:[{id:deviceId,name:"Scanner"}]};}throw new Error(`Unexpected SQL: ${sql}`);}},config=loadConfig({NODE_ENV:"test",DATABASE_URL:"postgres://unused",AUTH_MODE:"development",LOG_LEVEL:"silent"}),app=await buildApp({config,db});t.after(()=>app.close());

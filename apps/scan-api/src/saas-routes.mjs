@@ -4,6 +4,7 @@ import { requireCapability, hashPassword, hashToken } from "./auth.mjs";
 import { getIdempotentResponse, lockIdempotencyKey, requestHash, saveIdempotentResponse } from "./idempotency.mjs";
 import { parseIdempotencyKey } from "./schemas.mjs";
 import { createObjectStorage,presignCodeExport } from "./object-storage.mjs";
+import { isValidGln,isValidGtin } from "./gs1.mjs";
 
 const email = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
 const reason = z.string().trim().min(3).max(500);
@@ -133,7 +134,7 @@ export function registerSaasRoutes(app, { db,config }) {
 
   app.post("/api/v1/products", async (request,reply) => {
     requireCapability(request.principal,"products:write");
-    const body=z.object({ sku:z.string().trim().min(1).max(80), gtin:z.string().regex(/^\d{8,14}$/).optional(), name:z.string().trim().min(1).max(160), auditReason:reason }).parse(request.body);
+    const body=z.object({ sku:z.string().trim().min(1).max(80), gtin:z.string().refine(isValidGtin,"GTIN must be a valid 8, 12, 13, or 14 digit GS1 key including its check digit").optional(), name:z.string().trim().min(1).max(160), auditReason:reason }).parse(request.body);
     const response=await command(db,request,"PRODUCT_CREATE",body,async(client)=>{
       const created=await client.query("INSERT INTO products(tenant_id,sku,gtin,name) VALUES($1,$2,$3,$4) RETURNING *",[request.principal.tenantId,body.sku,body.gtin||null,body.name]);
       await tenantAudit(client,request,"PRODUCT_CREATE","PRODUCT",created.rows[0].id,null,created.rows[0]);
@@ -149,7 +150,7 @@ export function registerSaasRoutes(app, { db,config }) {
   });
   app.post("/api/v1/locations", async(request,reply)=>{
     requireCapability(request.principal,"locations:write");
-    const body=z.object({ organizationId:uuid,code:z.string().trim().min(1).max(80),gln:z.string().regex(/^\d{13}$/).optional(),name:z.string().trim().min(1).max(160),type:z.enum(["FACTORY","WAREHOUSE","DISTRIBUTOR","STORE","OFFICE"]),city:z.string().max(80).optional(),region:z.string().max(80).optional(),auditReason:reason }).parse(request.body);
+    const body=z.object({ organizationId:uuid,code:z.string().trim().min(1).max(80),gln:z.string().refine(isValidGln,"GLN must be a valid 13 digit GS1 key including its check digit").optional(),name:z.string().trim().min(1).max(160),type:z.enum(["FACTORY","WAREHOUSE","DISTRIBUTOR","STORE","OFFICE"]),city:z.string().max(80).optional(),region:z.string().max(80).optional(),auditReason:reason }).parse(request.body);
     const response=await command(db,request,"LOCATION_CREATE",body,async(client)=>{
       const org=await client.query("SELECT 1 FROM organizations WHERE tenant_id=$1 AND id=$2",[request.principal.tenantId,body.organizationId]); if(!org.rowCount) notFound();
       const created=await client.query("INSERT INTO locations(tenant_id,organization_id,code,gln,name,type,city,region) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *",[request.principal.tenantId,body.organizationId,body.code,body.gln||null,body.name,body.type,body.city||null,body.region||null]);
@@ -161,7 +162,7 @@ export function registerSaasRoutes(app, { db,config }) {
     FROM devices WHERE tenant_id=$1 ORDER BY created_at DESC`,[request.principal.tenantId]);return{items:result.rows};});
   app.post("/api/v1/devices",async(request,reply)=>{
     requireCapability(request.principal,"devices:write");const body=z.object({organizationId:uuid,locationId:uuid,name:z.string().trim().min(1).max(120),publicKey:z.string().max(8000).optional(),allowedEventTypes:z.array(deviceEventType).min(1).max(8),auditReason:reason}).parse(request.body);
-    const key=parseIdempotencyKey(request),hash=requestHash("DEVICE_REGISTER",body),response=await tx(db,async client=>{await lockIdempotencyKey(client,request.principal.tenantId,key);const cached=await getIdempotentResponse(client,request.principal.tenantId,key,hash);if(cached)return cached;const location=await client.query("SELECT gln FROM locations WHERE tenant_id=$1 AND id=$2 AND organization_id=$3 AND status='ACTIVE'",[request.principal.tenantId,body.locationId,body.organizationId]);if(!location.rowCount)notFound("Location not found");if(!location.rows[0].gln){const error=new Error("A GLN is required before a location can bind a production device");error.statusCode=409;error.code="LOCATION_GLN_REQUIRED";throw error;}const deviceToken=randomBytes(32).toString("base64url"),created=await client.query(`INSERT INTO devices(tenant_id,organization_id,location_id,name,public_key,credential_hash,allowed_event_types)
+    const key=parseIdempotencyKey(request),hash=requestHash("DEVICE_REGISTER",body),response=await tx(db,async client=>{await lockIdempotencyKey(client,request.principal.tenantId,key);const cached=await getIdempotentResponse(client,request.principal.tenantId,key,hash);if(cached)return cached;const location=await client.query("SELECT gln FROM locations WHERE tenant_id=$1 AND id=$2 AND organization_id=$3 AND status='ACTIVE'",[request.principal.tenantId,body.locationId,body.organizationId]);if(!location.rowCount)notFound("Location not found");if(!isValidGln(location.rows[0].gln)){const error=new Error("A valid GLN is required before a location can bind a production device");error.statusCode=409;error.code="LOCATION_GLN_REQUIRED";throw error;}const deviceToken=randomBytes(32).toString("base64url"),created=await client.query(`INSERT INTO devices(tenant_id,organization_id,location_id,name,public_key,credential_hash,allowed_event_types)
       VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,tenant_id,organization_id,location_id,name,public_key,allowed_event_types,status,created_at`,[request.principal.tenantId,body.organizationId,body.locationId,body.name,body.publicKey||null,hashToken(deviceToken),[...new Set(body.allowedEventTypes)]]);await tenantAudit(client,request,"DEVICE_REGISTER","DEVICE",created.rows[0].id,null,created.rows[0]);const stored={device:created.rows[0],deviceToken:null,credentialPreviouslyIssued:true};await saveIdempotentResponse(client,{tenantId:request.principal.tenantId,key,operation:"DEVICE_REGISTER",hash,status:201,body:stored});return{status:201,body:{device:created.rows[0],deviceToken,credentialPreviouslyIssued:false}};});return reply.code(response.status).send(response.body);
   });
   app.post("/api/v1/devices/:id/revoke",async(request,reply)=>{

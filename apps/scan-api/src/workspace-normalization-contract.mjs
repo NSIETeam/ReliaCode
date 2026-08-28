@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isValidGtin } from "./gs1.mjs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const CATEGORIES = ["preferences", "products", "codeBatches", "objects", "traceEvents", "operationEvents", "campaigns", "ledger", "risks", "agentRuns", "rejects"];
@@ -76,8 +77,10 @@ export function normalizeWorkspace(workspace, context) {
     const sku = string(first(item, "sku", "SKU", "code", "编码"), 160);
     const name = string(first(item, "name", "productName", "产品名", "名称"), 240);
     if (!id || !sku || !name) { reject(out, "products", index, "PRODUCT_ID_SKU_NAME_REQUIRED", item); continue; }
+    const gtin = string(first(item, "gtin", "GTIN"), 80);
+    if (gtin && !isValidGtin(gtin)) { reject(out, "products", index, "PRODUCT_GTIN_INVALID", item); continue; }
     products.add(id);
-    out.products.push(safeRecord("products", item, index, ctx, { id, sku, name, gtin: string(first(item, "gtin", "GTIN"), 80), status: string(first(item, "status", "状态"), 32) || "ACTIVE" }));
+    out.products.push(safeRecord("products", item, index, ctx, { id, sku, name, gtin, status: string(first(item, "status", "状态"), 32) || "ACTIVE" }));
   }
 
   const batches = new Set();

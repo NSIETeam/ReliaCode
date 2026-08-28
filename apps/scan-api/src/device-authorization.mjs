@@ -1,4 +1,5 @@
 import { hashToken } from "./auth.mjs";
+import { gs1DigitalLink,isValidGln } from "./gs1.mjs";
 
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
@@ -12,7 +13,7 @@ export async function authorizeOperationalDevice(client,config,request,eventType
     WHERE d.id=$1 AND d.tenant_id=$2 AND d.organization_id=$3 AND d.status='ACTIVE' AND d.credential_hash=$4
       AND $5=ANY(d.allowed_event_types) AND l.status='ACTIVE'`,[deviceId,request.principal.tenantId,request.principal.organizationId,hashToken(token),eventType]);
   if(!result.rowCount)fail("DEVICE_NOT_AUTHORIZED","Device is not authorized for this operation",404);
-  if(!result.rows[0].gln)fail("DEVICE_LOCATION_GLN_REQUIRED","The device location must have a GLN before production use",409);
+  if(!isValidGln(result.rows[0].gln))fail("DEVICE_LOCATION_GLN_REQUIRED","The device location must have a valid GLN before production use",409);
   await client.query("UPDATE devices SET last_seen_at=now() WHERE tenant_id=$1 AND id=$2",[request.principal.tenantId,deviceId]);
-  return{deviceId,locationId:result.rows[0].location_id,readPoint:`https://id.gs1.org/414/${result.rows[0].gln}`};
+  return{deviceId,locationId:result.rows[0].location_id,readPoint:gs1DigitalLink("https://id.gs1.org","414",result.rows[0].gln)};
 }

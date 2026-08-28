@@ -1,6 +1,7 @@
 import { loadConfig } from "./config.mjs";
 import { createDatabase } from "./db.mjs";
 import { pathToFileURL } from "node:url";
+import { gtinForDigitalLink,isValidGtin } from "./gs1.mjs";
 
 export async function processCodeJobChunk(db,config) {
   return db.transaction(async(client)=>{
@@ -10,8 +11,8 @@ export async function processCodeJobChunk(db,config) {
     );
     if(!selected.rowCount)return false;
     const job=selected.rows[0];
-    if(!job.gtin){
-      await client.query("UPDATE code_generation_jobs SET status='FAILED',last_error='Product requires a GTIN before production code generation',completed_at=now() WHERE id=$1",[job.id]);
+    if(!isValidGtin(job.gtin)){
+      await client.query("UPDATE code_generation_jobs SET status='FAILED',last_error='Product requires a valid GS1 GTIN before production code generation',completed_at=now() WHERE id=$1",[job.id]);
       const release=Math.max(0,Number(job.quantity)-Number(job.generated_count));
       if(release)await client.query("UPDATE tenant_usage_monthly SET code_count=GREATEST(0,code_count-$1),updated_at=now() WHERE tenant_id=$2 AND usage_month=date_trunc('month',now())::date",[release,job.tenant_id]);
       return true;
@@ -36,7 +37,7 @@ export async function processCodeJobChunk(db,config) {
               ELSE upper(substr(encode(digest($8::text||':'||($7+g)::text,'sha256'),'hex'),1,20)) END,
          $9,$10,'COMMISSIONED' FROM generate_series(1,$11) g
        ON CONFLICT (tenant_id,code) DO NOTHING RETURNING id`,
-      [job.tenant_id,job.product_id,batchId,base,job.gtin,job.serial_rule,job.generated_count,job.id,job.level,job.lot,count]
+      [job.tenant_id,job.product_id,batchId,base,gtinForDigitalLink(job.gtin),job.serial_rule,job.generated_count,job.id,job.level,job.lot,count]
     );
     const generated=job.generated_count+inserted.rowCount;
     await client.query(

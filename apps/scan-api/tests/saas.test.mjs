@@ -22,6 +22,16 @@ test("normalized product listing always binds the authenticated tenant",async(t)
   assert.deepEqual(query.context,{mode:"tenant",tenantId:principal.tenant_id});
 });
 
+test("product and location writes reject invalid GS1 check digits before database mutation",async(t)=>{
+  const mutations=[],db={query:async sql=>{if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};mutations.push(sql);throw new Error(`Unexpected SQL: ${sql}`);}};
+  const app=await buildApp({config,db});t.after(()=>app.close());
+  const productResponse=await app.inject({method:"POST",url:"/api/v1/products",headers:{...headers,"idempotency-key":"invalid-gtin-test-001"},payload:{sku:"BAD-GTIN",gtin:"06912345678901",name:"Invalid",auditReason:"validate GS1 boundary"}});
+  const locationResponse=await app.inject({method:"POST",url:"/api/v1/locations",headers:{...headers,"idempotency-key":"invalid-gln-test-001"},payload:{organizationId:principal.organization_id,code:"BAD-GLN",gln:"6901234567891",name:"Invalid",type:"FACTORY",auditReason:"validate GS1 boundary"}});
+  assert.equal(productResponse.statusCode,400);
+  assert.equal(locationResponse.statusCode,400);
+  assert.equal(mutations.length,0);
+});
+
 test("code job listing is tenant-scoped, paginated, and never selects object keys",async(t)=>{const calls=[],db={query:async(sql,params=[])=>{calls.push({sql,params});if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};if(sql.includes("FROM code_generation_jobs WHERE tenant_id=$1"))return{rowCount:1,rows:[{id:"33333333-3333-4333-8333-333333333333",created_at:"2026-08-28T00:00:00Z",export_status:"COMPLETED"}]};throw new Error(`Unexpected SQL: ${sql}`);}};const app=await buildApp({config,db});t.after(()=>app.close());const response=await app.inject({method:"GET",url:"/api/v1/code-jobs?limit=20",headers});assert.equal(response.statusCode,200);assert.equal(response.json().items[0].output_object_key,undefined);const query=calls.find(call=>call.sql.includes("FROM code_generation_jobs WHERE tenant_id=$1"));assert.doesNotMatch(query.sql,/output_object_key/);assert.equal(query.params[0],principal.tenant_id);assert.equal(query.params[3],21);});
 
 test("code export download signs only a tenant-owned completed object",async(t)=>{const storageConfig=loadConfig({NODE_ENV:"test",DATABASE_URL:"postgres://unused",AUTH_MODE:"development",LOG_LEVEL:"silent",OBJECT_STORAGE_ENDPOINT:"https://s3.example.cn",OBJECT_STORAGE_REGION:"cn-test-1",OBJECT_STORAGE_BUCKET:"exports",OBJECT_STORAGE_ACCESS_KEY_ID:"access",OBJECT_STORAGE_SECRET_ACCESS_KEY:"secret"}),id="33333333-3333-4333-8333-333333333333";const db={query:async(sql,params=[])=>{if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};if(sql.includes("SELECT output_object_key")){assert.deepEqual(params,[principal.tenant_id,id]);return{rowCount:1,rows:[{output_object_key:`tenants/${principal.tenant_id}/code-jobs/${id}/codes.csv`,export_status:"COMPLETED"}]};}throw new Error(`Unexpected SQL: ${sql}`);}};const app=await buildApp({config:storageConfig,db});t.after(()=>app.close());const response=await app.inject({method:"GET",url:`/api/v1/code-jobs/${id}/download`,headers});assert.equal(response.statusCode,200);assert.match(response.json().url,/X-Amz-Signature=/);assert.match(response.json().url,/codes\.csv/);});

@@ -1,1 +1,1 @@
-export const REQUIRED_SCHEMA_VERSION = "020_device_event_authorization.sql";
+export const REQUIRED_SCHEMA_VERSION = "021_gs1_master_data.sql";

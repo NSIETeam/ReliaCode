@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isValidGtin } from "./gs1.mjs";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const asUuid = (value) => typeof value === "string" && UUID.test(value) ? value : null;
@@ -19,9 +20,9 @@ export function resolveSafeMapping(localOrg, rows) {
 
 function productPlan(item, tenantId, stats) {
   stats.productsSeen++;
-  const id = asUuid(item?.id), sku = text(item?.sku || item?.code, 160), name = text(item?.name, 240);
-  if (!id || !sku || !name) { stats.skippedInvalid++; return null; }
-  return { sql: `INSERT INTO products(id,tenant_id,sku,gtin,name) VALUES($1,$2,$3,$4,$5) ON CONFLICT (tenant_id,sku) DO UPDATE SET gtin=COALESCE(products.gtin,EXCLUDED.gtin),name=COALESCE(products.name,EXCLUDED.name) WHERE products.id=EXCLUDED.id`, params: [id, tenantId, sku, text(item.gtin, 80), name] };
+  const id = asUuid(item?.id), sku = text(item?.sku || item?.code, 160), name = text(item?.name, 240), gtin = text(item?.gtin, 80);
+  if (!id || !sku || !name || (gtin && !isValidGtin(gtin))) { stats.skippedInvalid++; return null; }
+  return { sql: `INSERT INTO products(id,tenant_id,sku,gtin,name) VALUES($1,$2,$3,$4,$5) ON CONFLICT (tenant_id,sku) DO UPDATE SET gtin=COALESCE(products.gtin,EXCLUDED.gtin),name=COALESCE(products.name,EXCLUDED.name) WHERE products.id=EXCLUDED.id`, params: [id, tenantId, sku, gtin, name] };
 }
 
 function objectPlan(item, tenantId, productIds, organizationId, stats) {
