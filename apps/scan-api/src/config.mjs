@@ -32,6 +32,10 @@ const schema = z.object({
   TRUST_PROXY: boolean.default(false),
   LOG_LEVEL: z.enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"]).default("info"),
   OPEN_EPCIS_BASE_URL: z.string().url().optional(),
+  GS1_DIGITAL_LINK_BASE_URL: z.string().url().optional(),
+  WEBAUTHN_RP_NAME: z.string().min(1).max(100).default("ReliaCode"),
+  WEBAUTHN_RP_ID: z.string().min(1).optional(),
+  WEBAUTHN_ORIGIN: z.string().url().optional(),
   APP_VERSION: z.string().min(1).max(100).default("development"),
   GIT_SHA: z.string().min(1).max(100).default("unknown")
 });

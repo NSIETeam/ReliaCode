@@ -341,6 +341,9 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       );
       if (!inserted.rowCount) return { duplicate:true };
       const organizationName=body.organizationName || `${user.username} Organization`;
+      await client.query("INSERT INTO tenants(id,name,status,plan,approved_at) VALUES($1,$2,'ACTIVE','free',now())",[user.tenantId,organizationName]);
+      await client.query("INSERT INTO organizations(id,tenant_id,type,name) VALUES($1,$2,'BRAND',$3)",[user.organizationId,user.tenantId,organizationName]);
+      await client.query("INSERT INTO tenant_settings(tenant_id) VALUES($1)",[user.tenantId]);
       await client.query('INSERT INTO local_organizations(id,tenant_id,name,owner_user_id) VALUES($1,$2,$3,$4)',[user.organizationId,user.tenantId,organizationName,user.id]);
       await client.query('INSERT INTO local_memberships(id,user_id,organization_id,role) VALUES($1,$2,$3,$4)',[randomUUID(),user.id,user.organizationId,'BRAND_ADMIN']);
       return { duplicate:false, organizationName };
@@ -498,18 +501,20 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
   });
   app.get("/api/public/v1/objects/:publicId", async (request, reply) => {
     const publicId = z.string().uuid().parse(request.params.publicId);
-    if (config.AUTH_MODE === 'local') {
+    const result = await db.query(
+      `SELECT so.id,so.public_id,so.level,so.lot,so.status,so.created_at,so.tenant_id,p.gtin,p.name product_name,
+       EXISTS(SELECT 1 FROM recall_objects ro JOIN recalls r ON r.id=ro.recall_id AND r.tenant_id=ro.tenant_id
+              WHERE ro.object_id=so.id AND ro.tenant_id=so.tenant_id AND r.status='ACTIVE') recalled
+       FROM serialized_objects so JOIN products p ON p.id=so.product_id AND p.tenant_id=so.tenant_id
+       WHERE so.public_id=$1 AND p.status='ACTIVE'`,
+      [publicId]
+    );
+    if (!result.rowCount && config.AUTH_MODE === 'local') {
       const projected = await db.query('SELECT public_id,level,lot,status,commissioned_at,gtin,product_name,events FROM admin_public_objects WHERE public_id=$1', [publicId]);
       if (!projected.rowCount) return reply.code(404).send({ code:"PUBLIC_OBJECT_NOT_FOUND", message:"Reliable code not found" });
       const item=projected.rows[0];
       return { verified:true, product:{ name:item.product_name, gtin:item.gtin }, object:{ publicId:item.public_id, level:item.level, lot:item.lot, status:item.status, commissionedAt:item.commissioned_at }, events:Array.isArray(item.events) ? item.events.slice(0,20) : [] };
     }
-    const result = await db.query(
-      `SELECT so.id,so.public_id,so.level,so.lot,so.status,so.created_at,p.gtin,p.name product_name
-       FROM serialized_objects so JOIN products p ON p.id=so.product_id
-       WHERE so.public_id=$1 AND p.status='ACTIVE'`,
-      [publicId]
-    );
     if (!result.rowCount) return reply.code(404).send({ code:"PUBLIC_OBJECT_NOT_FOUND", message:"Reliable code not found" });
     const object = result.rows[0];
     const events = await db.query(
@@ -521,7 +526,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
     return {
       verified:true,
       product:{ name:object.product_name, gtin:object.gtin },
-      object:{ publicId:object.public_id, level:object.level, lot:object.lot, status:object.status, commissionedAt:object.created_at },
+      object:{ publicId:object.public_id, level:object.level, lot:object.lot, status:object.status, commissionedAt:object.created_at, recalled:Boolean(object.recalled) },
       events:events.rows.map((event) => ({ type:event.event_type, time:event.event_time }))
     };
   });

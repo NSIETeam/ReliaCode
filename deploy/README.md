@@ -1,11 +1,11 @@
 # ReliaCode API 生产部署
 
-此目录只包含无密钥的部署清单。生产数据库、OIDC 和 OpenEPCIS 必须由真实托管服务提供；GitHub Pages 不能承载 Node.js API 或 PostgreSQL。
+此目录只包含无密钥的部署清单。应用内账号和 Passkey 是默认身份方案；也可显式切换到 OIDC。PostgreSQL 和 OpenEPCIS 必须由受控服务提供，GitHub Pages 不能承载 Node.js API 或 PostgreSQL。
 
 ## 前置条件
 
 - 一套启用 TLS、备份和时间点恢复的 PostgreSQL。
-- 一个 OIDC 身份提供方，访问令牌需包含 ReliaCode 所需的租户、组织和角色声明。
+- 一个正式 HTTPS 域名；Passkey 的 `WEBAUTHN_RP_ID` 和 `WEBAUTHN_ORIGIN` 必须与该域名匹配。
 - 一个可接收 EPCIS 2.0 Capture 的 OpenEPCIS 服务。
 - 一个带 TLS 的容器运行环境和 API 域名，例如 `https://api.reliacode.example`。
 
@@ -32,7 +32,7 @@
 ```powershell
 docker compose --env-file .env -f compose.production.yaml pull
 docker compose --env-file .env -f compose.production.yaml run --rm migrate
-docker compose --env-file .env -f compose.production.yaml up -d api outbox-worker web
+docker compose --env-file .env -f compose.production.yaml up -d api outbox-worker code-worker web
 ```
 
 迁移器使用 PostgreSQL advisory lock，重复执行安全；API 的 `/health/ready` 只有在数据库包含当前要求的迁移版本时才返回 200。

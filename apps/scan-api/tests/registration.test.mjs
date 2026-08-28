@@ -17,6 +17,7 @@ function makeDb() {
         const user={ id:params[0],username:params[1],normalized_username:params[2],email:params[3],normalized_email:params[4],password_hash:params[5],tenant_id:params[6],organization_id:params[7],role:'BRAND_ADMIN',status:'ACTIVE' };
         users.push(user);return { rowCount:1,rows:[user] };
       }
+      if (sql.includes('INSERT INTO tenants') || sql.includes('INSERT INTO organizations') || sql.includes('INSERT INTO tenant_settings')) return { rowCount:1,rows:[] };
       if (sql.includes('INSERT INTO local_organizations')) { organizations.push({ id:params[0], tenant_id:params[1], name:params[2], owner_user_id:params[3], status:'ACTIVE' }); return { rowCount:1,rows:[] }; }
       if (sql.includes('INSERT INTO local_memberships')) { memberships.push({ id:params[0],user_id:params[1],organization_id:params[2],role:params[3],status:'ACTIVE' }); return { rowCount:1,rows:[] }; }
       if (sql.includes('SELECT id,username,email,password_hash') && sql.includes('FROM local_users')) {

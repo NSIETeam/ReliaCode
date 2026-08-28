@@ -15,7 +15,7 @@ export RELIACODE_WEB_IMAGE="ghcr.io/nsieteam/reliacode-web:sha-${RELEASE_SHA}"
 compose="docker compose --env-file .env -f compose.production.yaml"
 $compose pull
 $compose run --rm migrate
-$compose up -d --remove-orphans api outbox-worker web
+$compose up -d --remove-orphans api outbox-worker code-worker web
 
 attempt=1
 while [ "$attempt" -le 30 ]; do
@@ -30,6 +30,6 @@ while [ "$attempt" -le 30 ]; do
 done
 
 $compose ps
-$compose logs --tail=100 api web outbox-worker
+$compose logs --tail=100 api web outbox-worker code-worker
 printf 'ReliaCode release sha-%s failed health verification\n' "$RELEASE_SHA" >&2
 exit 1

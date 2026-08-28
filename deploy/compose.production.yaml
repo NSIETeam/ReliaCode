@@ -7,13 +7,18 @@ services:
     environment: &api_environment
       NODE_ENV: production
       DATABASE_URL_FILE: /run/secrets/database_url
-      DATABASE_SSL: "true"
-      AUTH_MODE: oidc
-      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:?OIDC_ISSUER_URL is required}
+      DATABASE_SSL: ${DATABASE_SSL:-false}
+      AUTH_MODE: ${AUTH_MODE:-local}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+      OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
       OIDC_AUDIENCE: ${OIDC_AUDIENCE:-reliacode-api}
       CORS_ORIGINS: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
       TRUST_PROXY: "true"
       OPEN_EPCIS_BASE_URL: ${OPEN_EPCIS_BASE_URL:?OPEN_EPCIS_BASE_URL is required}
+      GS1_DIGITAL_LINK_BASE_URL: ${GS1_DIGITAL_LINK_BASE_URL:?GS1_DIGITAL_LINK_BASE_URL is required}
+      WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-ReliaCode}
+      WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?WEBAUTHN_RP_ID is required}
+      WEBAUTHN_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
     secrets: [database_url]
     restart: "no"
 
@@ -37,6 +42,17 @@ services:
   outbox-worker:
     image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
     command: ["src/outbox-worker.mjs"]
+    environment:
+      <<: *api_environment
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}
+    secrets: [database_url]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  code-worker:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    command: ["src/code-job-worker.mjs"]
     environment:
       <<: *api_environment
       DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}

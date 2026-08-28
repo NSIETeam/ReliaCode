@@ -2,12 +2,15 @@ import { createRemoteJWKSet, jwtVerify } from "jose";
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 export const ROLE_CAPABILITIES = Object.freeze({
-  BRAND_ADMIN: ["codes:write", "objects:read", "events:read", "campaigns:write", "risks:review", "ledger:read", "members:read", "members:invite", "members:manage"],
+  PLATFORM_OPERATOR: ["platform:tenants:read", "platform:tenants:write", "platform:audit:read"],
+  TENANT_OWNER: ["tenant:manage", "products:write", "codes:write", "codes:approve", "objects:read", "events:read", "campaigns:write", "risks:review", "recalls:write", "ledger:read", "members:read", "members:invite", "members:manage", "relationships:write", "locations:write", "devices:write", "documents:write", "integrations:write"],
+  BRAND_ADMIN: ["products:write", "codes:write", "codes:approve", "objects:read", "events:read", "campaigns:write", "risks:review", "recalls:write", "ledger:read", "members:read", "members:invite", "members:manage", "relationships:write", "locations:write", "devices:write", "documents:write", "integrations:write"],
   BRAND_AUDITOR: ["objects:read", "events:read", "risks:review", "ledger:read"],
   FACTORY_OPERATOR: ["objects:read", "events:write:packing"],
   DISTRIBUTOR_RECEIVER: ["objects:read", "events:write:distributor_receiving"],
   STORE_RECEIVER: ["objects:read", "events:write:store_receiving", "ledger:read:self"],
-  FINANCE: ["ledger:read", "settlements:write"]
+  FINANCE: ["ledger:read", "settlements:write"],
+  READ_ONLY_AUDITOR: ["objects:read", "events:read", "ledger:read"]
 });
 export const ROLES = Object.freeze(Object.keys(ROLE_CAPABILITIES));
 
@@ -49,7 +52,9 @@ export async function createAuthenticator(config) {
         const membership = await config.db.query(
           `SELECT m.organization_id,m.role,o.name organization_name
            FROM local_memberships m JOIN local_organizations o ON o.id=m.organization_id
+           JOIN tenants t ON t.id=o.tenant_id
            WHERE m.user_id=$1 AND m.status='ACTIVE' AND o.status='ACTIVE'
+             AND t.status='ACTIVE'
            ORDER BY m.created_at ASC LIMIT 1`,
           [row.id]
         );

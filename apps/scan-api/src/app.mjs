@@ -6,6 +6,8 @@ import { randomUUID } from "node:crypto";
 import { ZodError } from "zod";
 import { createAuthenticator, hashToken } from "./auth.mjs";
 import { registerRoutes } from "./routes.mjs";
+import { registerSaasRoutes } from "./saas-routes.mjs";
+import { registerPasskeyRoutes } from "./passkey-routes.mjs";
 import { REQUIRED_SCHEMA_VERSION } from "./schema-version.mjs";
 
 export async function buildApp({ config, db }) {
@@ -27,7 +29,7 @@ export async function buildApp({ config, db }) {
       return callback(null, false);
     },
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id", "X-ReliaCode-Principal", "X-CSRF-Token"]
   });
   await app.register(rateLimit, { max: 300, timeWindow: "1 minute", ban: 3, keyGenerator: (request) => request.ip });
@@ -41,7 +43,8 @@ export async function buildApp({ config, db }) {
     const invitationAccept = pathname === "/api/auth/invitations/accept";
     const passwordReset = pathname === "/api/auth/password-reset/request" || pathname === "/api/auth/password-reset/confirm";
     const hasAuthCredentials = Boolean(request.headers.authorization || request.headers.cookie);
-    if (request.url === "/health/live" || request.url === "/health/ready" || request.url.startsWith("/api/public/") || request.url === "/api/auth/login" || request.url === "/api/auth/register" || passwordReset || (invitationAccept && !hasAuthCredentials)) return;
+    const passkeyLogin = pathname === "/api/auth/passkeys/authentication/options" || pathname === "/api/auth/passkeys/authentication/verify";
+    if (request.url === "/health/live" || request.url === "/health/ready" || request.url.startsWith("/api/public/") || request.url === "/api/auth/login" || request.url === "/api/auth/register" || pathname === "/api/v1/tenant-applications" || passkeyLogin || passwordReset || (invitationAccept && !hasAuthCredentials)) return;
     try { request.principal = await authenticate(request); } catch (error) {
       request.log.warn({ error: error.message }, "authentication failed");
     }
@@ -52,6 +55,10 @@ export async function buildApp({ config, db }) {
         if (origin && !config.corsOrigins.includes(origin)) return reply.code(403).send({ code:"ORIGIN_NOT_ALLOWED", message:"Origin is not allowed", requestId:request.id });
         const supplied = String(request.headers["x-csrf-token"] || "");
         if (!supplied || hashToken(supplied) !== request.authSession.csrf_token_hash) return reply.code(403).send({ code:"CSRF_INVALID", message:"CSRF token is invalid", requestId:request.id });
+        if (pathname.startsWith("/api/v1/") && ["BRAND_ADMIN","TENANT_OWNER"].includes(request.principal.role) && request.principal.id !== "local-admin") {
+          const passkeys=await db.query("SELECT count(*)::int count FROM webauthn_credentials WHERE user_id=$1",[request.principal.id]);
+          if(Number(passkeys.rows[0]?.count||0)<2)return reply.code(428).send({code:"ADMIN_PASSKEYS_REQUIRED",message:"Administrators must register at least two Passkeys before sensitive operations",requestId:request.id});
+        }
       }
       return;
     }
@@ -90,6 +97,8 @@ export async function buildApp({ config, db }) {
     catch { return reply.code(503).send({ status:"not_ready" }); }
   });
   registerRoutes(app, { db, config, loginAttempts });
+  registerSaasRoutes(app, { db, config });
+  registerPasskeyRoutes(app, { db, config });
 
   app.setNotFoundHandler((request, reply) => reply.code(404).send({ code:"NOT_FOUND", message:"Route not found", requestId:request.id }));
   app.setErrorHandler((error, request, reply) => {
