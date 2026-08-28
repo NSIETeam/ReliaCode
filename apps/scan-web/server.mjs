@@ -19,10 +19,11 @@ const securityHeaders = {
   "Cross-Origin-Opener-Policy":"same-origin", "Cross-Origin-Resource-Policy":"same-origin"
 };
 
-export function runtimeConfig({ persistentWorkspace = Boolean(apiBaseUrl) } = {}) {
+export function runtimeConfig({ persistentWorkspace = false, domainApi = Boolean(apiBaseUrl) } = {}) {
   return `window.RELIACODE_CONFIG = Object.freeze(${JSON.stringify({
     apiBaseUrl: "",
-    persistentWorkspace:Boolean(persistentWorkspace)
+    persistentWorkspace:Boolean(persistentWorkspace),
+    domainApi:Boolean(domainApi)
   })});\n`;
 }
 

@@ -15,6 +15,7 @@ async function storeChallenge(db,{challenge,userId,purpose}){await db.query("DEL
 async function consumeChallenge(client,challenge,purpose){const result=await client.query("UPDATE webauthn_challenges SET used_at=now() WHERE challenge_hash=$1 AND purpose=$2 AND used_at IS NULL AND expires_at>now() RETURNING user_id",[hashToken(challenge),purpose]);if(!result.rowCount){const e=new Error("Passkey challenge is invalid or expired");e.statusCode=400;e.code="PASSKEY_CHALLENGE_INVALID";throw e;}return result.rows[0];}
 
 export function registerPasskeyRoutes(app,{db,config}){
+  app.get("/api/auth/passkeys",async(request)=>{const result=await db.query("SELECT id,name,transports,device_type,backed_up,last_used_at,created_at FROM webauthn_credentials WHERE user_id=$1 ORDER BY created_at DESC",[request.principal.id]);return{items:result.rows};});
   app.post("/api/auth/passkeys/registration/options",async(request)=>{
     if(config.AUTH_MODE!=="local")throw Object.assign(new Error("Route not found"),{statusCode:404,code:"NOT_FOUND"});
     const user=await db.query("SELECT id,username FROM local_users WHERE id=$1 AND status='ACTIVE'",[request.principal.id]);if(!user.rowCount)throw Object.assign(new Error("User not found"),{statusCode:404,code:"NOT_FOUND"});
