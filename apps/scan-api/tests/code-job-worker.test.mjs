@@ -19,6 +19,14 @@ test("code worker resumes an existing batch, pads GTIN for Digital Link, and com
   assert.equal(updates[0][1],5);
 });
 
+test("worker query selects the GTIN for the job packaging level",async()=>{
+  let selection;const db=database(async(sql)=>{selection=sql;return{rowCount:0,rows:[]};});
+  assert.equal(await processCodeJobChunk(db,{GS1_DIGITAL_LINK_BASE_URL:"https://id.reliacode.cn"}),false);
+  assert.match(selection,/product_trade_items/);
+  assert.match(selection,/pi\.level=j\.level/);
+  assert.match(selection,/WHEN j\.level='ITEM'/);
+});
+
 test("pallet worker emits SSCC AI (00) from the immutable allocation snapshot without requiring a GTIN",async()=>{
   let insert;const job={id:"job-sscc",tenant_id:"tenant-1",product_id:"product-1",code_batch_id:"batch-1",requested_by:"user-1",level:"PALLET",identifier_scheme:"SSCC",quantity:2,serial_rule:"SEQUENTIAL",lot:"LOT-1",generated_count:0,gtin:null,gs1_company_prefix_snapshot:"0614141",sscc_extension_digit:0,sscc_start_reference:"12345"};
   const db=database(async(sql,params=[])=>{if(sql.includes("SELECT j.*"))return{rowCount:1,rows:[job]};if(sql.includes("INSERT INTO serialized_objects")){insert={sql,params};return{rowCount:2,rows:[{id:"one"},{id:"two"}]};}if(sql.includes("UPDATE code_generation_jobs SET generated_count"))return{rowCount:1,rows:[]};throw new Error(`Unexpected SQL: ${sql}`);});

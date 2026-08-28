@@ -32,6 +32,20 @@ test("product and location writes reject invalid GS1 check digits before databas
   assert.equal(mutations.length,0);
 });
 
+test("a product cannot reuse one GTIN for both item and case trade items",async(t)=>{
+  const db={query:async sql=>sql.includes("SELECT EXISTS")?{rowCount:1,rows:[{active:true}]}:assert.fail(`database mutation was attempted: ${sql}`)},app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject({method:"POST",url:"/api/v1/products",headers:{...headers,"idempotency-key":"same-packaging-gtin-001"},payload:{sku:"SAME-GTIN",gtin:"06912345678902",caseGtin:"06912345678902",name:"Invalid packaging",auditReason:"validate packaging identity"}});
+  assert.equal(response.statusCode,400);
+});
+
+test("case code jobs are rejected before quota reservation when the case GTIN is missing",async(t)=>{
+  const calls=[],client={query:async(sql,params=[])=>{calls.push({sql,params});if(sql.includes("FROM idempotency_records"))return{rowCount:0,rows:[]};if(sql.startsWith("SELECT 1 FROM products p"))return{rowCount:0,rows:[]};return{rowCount:1,rows:[]};}},db={query:async sql=>sql.includes("SELECT EXISTS")?{rowCount:1,rows:[{active:true}]}:{rowCount:0,rows:[]},transaction:async work=>work(client)},app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject({method:"POST",url:"/api/v1/code-jobs",headers:{...headers,"idempotency-key":"case-gtin-required-001"},payload:{productId:"33333333-3333-4333-8333-333333333333",level:"CASE",quantity:10,serialRule:"SEQUENTIAL",auditReason:"require case packaging identity"}});
+  assert.equal(response.statusCode,404);
+  assert.equal(calls.some(call=>call.sql.includes("tenant_usage_monthly")),false);
+  assert.deepEqual(calls.find(call=>call.sql.startsWith("SELECT 1 FROM products p")).params,[principal.tenant_id,"33333333-3333-4333-8333-333333333333","CASE"]);
+});
+
 test("random pallet jobs are rejected because SSCC references use governed sequential allocation",async(t)=>{
   const mutations=[],db={query:async sql=>{if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};mutations.push(sql);throw new Error(`Unexpected SQL: ${sql}`);}};
   const app=await buildApp({config,db});t.after(()=>app.close());

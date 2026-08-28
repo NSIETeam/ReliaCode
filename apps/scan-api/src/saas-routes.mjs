@@ -27,6 +27,7 @@ function page(rows, limit) {
   return { items, nextCursor:hasMore ? cursorEncode(items.at(-1)) : null };
 }
 function notFound(message="Resource not found") { const error=new Error(message); error.statusCode=404; error.code="NOT_FOUND"; throw error; }
+function rethrowUnique(error,code,message){if(error?.code==="23505"){error.statusCode=409;error.code=code;error.message=message;}throw error;}
 async function tx(db, work) { return typeof db.transaction === "function" ? db.transaction(work) : work(db); }
 async function tenantAudit(client, request, action, entityType, entityId, beforeState, afterState) {
   return client.query(
@@ -144,7 +145,7 @@ export function registerSaasRoutes(app, { db,config }) {
     const query=pageQuery.extend({ status:z.enum(["ACTIVE","INACTIVE"]).optional(), q:z.string().trim().max(100).optional() }).parse(request.query);
     const cursor=cursorDecode(query.cursor);
     const result=await db.query(
-      `SELECT id,sku,gtin,name,status,created_at FROM products WHERE tenant_id=$1
+      `SELECT id,sku,gtin,name,status,created_at,COALESCE((SELECT jsonb_object_agg(level,gtin) FROM product_trade_items pti WHERE pti.tenant_id=products.tenant_id AND pti.product_id=products.id),'{}'::jsonb) trade_items FROM products WHERE tenant_id=$1
        AND ($2::text IS NULL OR status=$2) AND ($3::text IS NULL OR sku ILIKE '%'||$3||'%' OR name ILIKE '%'||$3||'%')
        AND ($4::timestamptz IS NULL OR (created_at,id)<($4,$5::uuid)) ORDER BY created_at DESC,id DESC LIMIT $6`,
       [request.principal.tenantId,query.status||null,query.q||null,cursor?.[0]||null,cursor?.[1]||null,query.limit+1]
@@ -154,13 +155,29 @@ export function registerSaasRoutes(app, { db,config }) {
 
   app.post("/api/v1/products", async (request,reply) => {
     requireCapability(request.principal,"products:write");
-    const body=z.object({ sku:z.string().trim().min(1).max(80), gtin:z.string().refine(isValidGtin,"GTIN must be a valid 8, 12, 13, or 14 digit GS1 key including its check digit").optional(), name:z.string().trim().min(1).max(160), auditReason:reason }).parse(request.body);
+    const body=z.object({ sku:z.string().trim().min(1).max(80), gtin:z.string().refine(isValidGtin,"GTIN must be a valid 8, 12, 13, or 14 digit GS1 key including its check digit").optional(),caseGtin:z.string().refine(isValidGtin,"Case GTIN must be a valid GS1 key including its check digit").optional(), name:z.string().trim().min(1).max(160), auditReason:reason }).refine(value=>!value.gtin||!value.caseGtin||value.gtin!==value.caseGtin,{path:["caseGtin"],message:"Item and case trade items require different GTINs"}).parse(request.body);
     const response=await command(db,request,"PRODUCT_CREATE",body,async(client)=>{
-      const created=await client.query("INSERT INTO products(tenant_id,sku,gtin,name) VALUES($1,$2,$3,$4) RETURNING *",[request.principal.tenantId,body.sku,body.gtin||null,body.name]);
-      await tenantAudit(client,request,"PRODUCT_CREATE","PRODUCT",created.rows[0].id,null,created.rows[0]);
-      return {status:201,value:created.rows[0]};
+      let created;try{created=await client.query("INSERT INTO products(tenant_id,sku,gtin,name) VALUES($1,$2,$3,$4) RETURNING *",[request.principal.tenantId,body.sku,body.gtin||null,body.name]);
+        for(const [level,gtin] of [["ITEM",body.gtin],["CASE",body.caseGtin]])if(gtin)await client.query("INSERT INTO product_trade_items(tenant_id,product_id,level,gtin,created_by) VALUES($1,$2,$3,$4,$5)",[request.principal.tenantId,created.rows[0].id,level,gtin,request.principal.id]);
+      }catch(error){rethrowUnique(error,"PRODUCT_IDENTIFIER_EXISTS","The SKU or packaging GTIN is already assigned in this tenant");}
+      const value={...created.rows[0],trade_items:Object.fromEntries([["ITEM",body.gtin],["CASE",body.caseGtin]].filter(([,gtin])=>gtin))};await tenantAudit(client,request,"PRODUCT_CREATE","PRODUCT",created.rows[0].id,null,value);
+      return {status:201,value};
     });
     return reply.code(response.status).send(response.body);
+  });
+
+  app.post("/api/v1/products/:id/trade-items",async(request,reply)=>{
+    requireCapability(request.principal,"products:write");const productId=uuid.parse(request.params.id);
+    const body=z.object({level:z.enum(["ITEM","CASE"]),gtin:z.string().refine(isValidGtin,"GTIN must be a valid GS1 key including its check digit"),auditReason:reason}).parse(request.body);
+    const response=await command(db,request,"PRODUCT_TRADE_ITEM_SET",{productId,...body},async client=>{
+      const product=await client.query("SELECT id FROM products WHERE tenant_id=$1 AND id=$2 AND status='ACTIVE'",[request.principal.tenantId,productId]);if(!product.rowCount)notFound("Product not found");
+      const found=await client.query("SELECT * FROM product_trade_items WHERE tenant_id=$1 AND product_id=$2 AND level=$3 FOR UPDATE",[request.principal.tenantId,productId,body.level]);
+      if(found.rowCount&&found.rows[0].gtin!==body.gtin){const used=await client.query("SELECT 1 FROM code_generation_jobs WHERE tenant_id=$1 AND product_id=$2 AND level=$3 LIMIT 1",[request.principal.tenantId,productId,body.level]);if(used.rowCount){const error=new Error("A packaging GTIN cannot change after a code job has been created");error.statusCode=409;error.code="PACKAGING_GTIN_LOCKED";throw error;}}
+      let changed;try{changed=await client.query(`INSERT INTO product_trade_items(tenant_id,product_id,level,gtin,created_by) VALUES($1,$2,$3,$4,$5)
+        ON CONFLICT(tenant_id,product_id,level) DO UPDATE SET gtin=EXCLUDED.gtin,updated_at=now() RETURNING *`,[request.principal.tenantId,productId,body.level,body.gtin,request.principal.id]);}catch(error){rethrowUnique(error,"PACKAGING_GTIN_EXISTS","The packaging GTIN is already assigned in this tenant");}
+      if(body.level==="ITEM")await client.query("UPDATE products SET gtin=$1 WHERE tenant_id=$2 AND id=$3",[body.gtin,request.principal.tenantId,productId]);
+      await tenantAudit(client,request,"PRODUCT_TRADE_ITEM_SET","PRODUCT",productId,found.rows[0]||null,changed.rows[0]);return{value:changed.rows[0]};
+    });return reply.code(response.status).send(response.body);
   });
 
   app.get("/api/v1/locations", async (request) => {
@@ -208,7 +225,8 @@ export function registerSaasRoutes(app, { db,config }) {
     requireCapability(request.principal,"codes:write");
     const body=z.object({productId:uuid,level:z.enum(["ITEM","CASE","PALLET"]),quantity:z.number().int().min(1).max(1000000),serialRule:z.enum(["RANDOM","SEQUENTIAL"]),lot:z.string().trim().max(120).optional(),auditReason:reason}).superRefine((value,ctx)=>{if(value.level==="PALLET"&&value.serialRule!=="SEQUENTIAL")ctx.addIssue({code:"custom",path:["serialRule"],message:"SSCC pallet allocation requires a sequential serial rule"});}).parse(request.body);
     const response=await command(db,request,"CODE_JOB_CREATE",body,async(client,key)=>{
-      const product=await client.query("SELECT 1 FROM products WHERE tenant_id=$1 AND id=$2 AND status='ACTIVE'",[request.principal.tenantId,body.productId]); if(!product.rowCount) notFound("Product not found");
+      const product=await client.query(`SELECT 1 FROM products p WHERE p.tenant_id=$1 AND p.id=$2 AND p.status='ACTIVE'
+        AND ($3='PALLET' OR EXISTS(SELECT 1 FROM product_trade_items pti WHERE pti.tenant_id=p.tenant_id AND pti.product_id=p.id AND pti.level=$3))`,[request.principal.tenantId,body.productId,body.level]); if(!product.rowCount) notFound("Product or packaging GTIN not found");
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",["code-quota:"+request.principal.tenantId]);
       const quota=await client.query(`SELECT COALESCE(s.max_monthly_codes,10000)::bigint max_codes,COALESCE(u.code_count,0)::bigint used_codes
         FROM tenants t LEFT JOIN tenant_settings s ON s.tenant_id=t.id LEFT JOIN tenant_usage_monthly u ON u.tenant_id=t.id AND u.usage_month=date_trunc('month',now())::date WHERE t.id=$1`,[request.principal.tenantId]);

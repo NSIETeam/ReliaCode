@@ -6,7 +6,9 @@ import { gtinForDigitalLink,isValidGtin } from "./gs1.mjs";
 export async function processCodeJobChunk(db,config) {
   return db.transaction(async(client)=>{
     const selected=await client.query(
-      `SELECT j.*,p.gtin FROM code_generation_jobs j JOIN products p ON p.id=j.product_id AND p.tenant_id=j.tenant_id
+      `SELECT j.*,CASE WHEN j.level='ITEM' THEN COALESCE(pi.gtin,p.gtin) ELSE pi.gtin END gtin
+       FROM code_generation_jobs j JOIN products p ON p.id=j.product_id AND p.tenant_id=j.tenant_id
+       LEFT JOIN product_trade_items pi ON pi.tenant_id=j.tenant_id AND pi.product_id=j.product_id AND pi.level=j.level
        WHERE j.status IN ('QUEUED','RUNNING') ORDER BY j.created_at LIMIT 1 FOR UPDATE OF j SKIP LOCKED`
     );
     if(!selected.rowCount)return false;
