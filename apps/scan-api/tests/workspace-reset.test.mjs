@@ -14,7 +14,7 @@ function makeDb() {
       if (sql.includes('FROM admin_sessions WHERE token_hash=$1')) {
         return session ? { rowCount:1, rows:[{ ...session, expires_at:new Date(Date.now()+3600000) }] } : { rowCount:0, rows:[] };
       }
-      if (sql.includes('FROM local_users WHERE')) return { rowCount:0, rows:[] };
+      if (sql.includes('FROM local_users')) return { rowCount:0, rows:[] };
       if (sql.includes('DELETE FROM admin_sessions')) { return { rowCount:0, rows:[] }; }
       if (sql.includes('INSERT INTO admin_sessions')) {
         session = { token_hash:params[0], csrf_token_hash:params[1] };

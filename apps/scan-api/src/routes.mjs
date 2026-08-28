@@ -364,10 +364,15 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
     if (attempt.resetAt <= now) { attempt.count = 0; attempt.resetAt = now + 300000; }
     if (attempt.count >= 5) return reply.code(429).send({ code:'LOGIN_RATE_LIMITED', message:'Too many login attempts' });
     const body = z.object({ username:z.string().min(1).max(80), password:z.string().min(1).max(200) }).parse(request.body);
-    const found=await db.query('SELECT id,username,email,password_hash,tenant_id,organization_id,role FROM local_users WHERE (normalized_username=$1 OR normalized_email=$1) AND status=\'ACTIVE\'', [normalized(body.username)]);
+    const found=await db.query(`SELECT u.id,u.username,u.email,u.password_hash,u.tenant_id,u.organization_id,u.role,
+      COALESCE(ts.password_login_for_operators,true) password_login_for_operators
+      FROM local_users u LEFT JOIN tenant_settings ts ON ts.tenant_id=u.tenant_id
+      WHERE (u.normalized_username=$1 OR u.normalized_email=$1) AND u.status='ACTIVE'`, [normalized(body.username)]);
     const user=found.rows[0] || null;
     const isLegacyAdmin=body.username===config.ADMIN_USERNAME && verifyPassword(body.password,config.ADMIN_PASSWORD_HASH);
-    const passwordValid=user ? verifyPassword(body.password,user.password_hash) : isLegacyAdmin;
+    const operatorRoles=new Set(['FACTORY_OPERATOR','DISTRIBUTOR_RECEIVER','STORE_RECEIVER']);
+    const passwordAllowed=!user||!operatorRoles.has(String(user.role).toUpperCase())||user.password_login_for_operators!==false;
+    const passwordValid=user ? passwordAllowed&&verifyPassword(body.password,user.password_hash) : isLegacyAdmin;
     if (!passwordValid) {
       attempt.count += 1; loginAttempts.set(key, attempt);
       return reply.code(401).send({ code:'INVALID_CREDENTIALS', message:'Invalid username or password' });

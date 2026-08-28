@@ -46,7 +46,8 @@ export async function buildApp({ config, db }) {
     const passwordReset = pathname === "/api/auth/password-reset/request" || pathname === "/api/auth/password-reset/confirm";
     const hasAuthCredentials = Boolean(request.headers.authorization || request.headers.cookie);
     const passkeyLogin = pathname === "/api/auth/passkeys/authentication/options" || pathname === "/api/auth/passkeys/authentication/verify";
-    if (request.url === "/health/live" || request.url === "/health/ready" || pathname === "/metrics" || request.url.startsWith("/api/public/") || request.url === "/api/auth/login" || request.url === "/api/auth/register" || pathname === "/api/v1/tenant-applications" || passkeyLogin || passwordReset || (invitationAccept && !hasAuthCredentials)) return;
+    const recoveryCodeLogin=pathname==="/api/auth/recovery-codes/consume";
+    if (request.url === "/health/live" || request.url === "/health/ready" || pathname === "/metrics" || request.url.startsWith("/api/public/") || request.url === "/api/auth/login" || request.url === "/api/auth/register" || pathname === "/api/v1/tenant-applications" || passkeyLogin || recoveryCodeLogin || passwordReset || (invitationAccept && !hasAuthCredentials)) return;
     try { request.principal = await authenticate(request); } catch (error) {
       request.log.warn({ error: error.message }, "authentication failed");
     }

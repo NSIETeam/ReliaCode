@@ -7,7 +7,7 @@ import {
 } from "../src/auth-recovery.mjs";
 
 function fixture() {
-  const state = { users: [{ id: "user-1", email: "owner@example.com" }], tokens: [], passwords: [] };
+  const state = { users: [{ id: "user-1", email: "owner@example.com", emailVerifiedAt:"2025-12-01T00:00:00.000Z" }], tokens: [], passwords: [] };
   const store = {
     state,
     async findUserByEmail(email) { return state.users.find((u) => u.email === email) ?? null; },
@@ -47,6 +47,8 @@ test("unknown addresses receive an enumeration-resistant response", async () => 
   assert.deepEqual(result, { accepted: true, delivered: false });
   assert.equal(state.tokens.length, 0);
 });
+
+test("unverified email receives the same generic response and no reset token",async()=>{const{service,state}=fixture();state.users[0].emailVerifiedAt=null;const result=await service.requestPasswordReset("owner@example.com");assert.deepEqual(result,{accepted:true,delivered:false});assert.equal(state.tokens.length,0);});
 
 test("requests enforce the minimum interval", async () => {
   const { service, setNow } = fixture();

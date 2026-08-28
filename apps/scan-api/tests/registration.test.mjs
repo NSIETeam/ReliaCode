@@ -20,7 +20,7 @@ function makeDb() {
       if (sql.includes('INSERT INTO tenants') || sql.includes('INSERT INTO organizations') || sql.includes('INSERT INTO tenant_settings')) return { rowCount:1,rows:[] };
       if (sql.includes('INSERT INTO local_organizations')) { organizations.push({ id:params[0], tenant_id:params[1], name:params[2], owner_user_id:params[3], status:'ACTIVE' }); return { rowCount:1,rows:[] }; }
       if (sql.includes('INSERT INTO local_memberships')) { memberships.push({ id:params[0],user_id:params[1],organization_id:params[2],role:params[3],status:'ACTIVE' }); return { rowCount:1,rows:[] }; }
-      if (sql.includes('SELECT id,username,email,password_hash') && sql.includes('FROM local_users')) {
+      if (sql.includes('password_login_for_operators') && sql.includes('FROM local_users')) {
         const user=users.find((item)=>item.normalized_username===params[0]||item.normalized_email===params[0]);
         return user ? { rowCount:1,rows:[user] } : { rowCount:0,rows:[] };
       }
