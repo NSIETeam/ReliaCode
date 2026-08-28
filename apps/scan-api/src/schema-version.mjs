@@ -1,1 +1,1 @@
-export const REQUIRED_SCHEMA_VERSION = "019_recovery_code_idempotency.sql";
+export const REQUIRED_SCHEMA_VERSION = "020_device_event_authorization.sql";

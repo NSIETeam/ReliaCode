@@ -41,6 +41,7 @@
 - `accountId/actor`：登录账号和操作者。
 - `org`：账号代表的业务组织。
 - `deviceId`：绑定的扫码设备或手机实例。
+- 生产确认必须同时携带 `X-ReliaCode-Device-Id` 与一次性签发的 `X-ReliaCode-Device-Token`。服务端校验租户、组织、设备状态及 `allowed_event_types`，并以设备绑定网点的 GLN 生成读取点；客户端提交的地理位置不构成业务事实。
 - `location`：经过授权的作业地点。
 - `businessDocument`：发货单、收货单、工单或装箱任务。
 - `eventTime/recordTime`：业务发生时间和平台接收时间。

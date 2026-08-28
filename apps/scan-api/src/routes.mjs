@@ -7,6 +7,7 @@ import { codeBatchSchema, parseIdempotencyKey, riskDecisionSchema, traceEventSch
 import { evaluateEntitlements, getPlan } from "./entitlements.mjs";
 import { enqueueWebhookDeliveries } from "./webhooks.mjs";
 import { createLocalSession,rotateLocalSession,sessionCookies } from "./session-security.mjs";
+import { authorizeOperationalDevice } from "./device-authorization.mjs";
 
 function audit(client, request, action, entityType, entityId, beforeState, afterState) {
   const principal = request.principal;
@@ -568,11 +569,12 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
     const body = codeBatchSchema.parse(request.body);
     const key = parseIdempotencyKey(request);
     const operation = "CREATE_CODE_BATCH";
-    const hash = requestHash(operation, body);
+    const hash = requestHash(operation, {...body,deviceId:String(request.headers["x-reliacode-device-id"]||"")});
     const response = await db.transaction(async (client) => {
       await lockIdempotencyKey(client, request.principal.tenantId, key);
       const cached = await getIdempotentResponse(client, request.principal.tenantId, key, hash);
       if (cached) return cached;
+      const device=body.eventType==="VERIFY"?{deviceId:null,locationId:null,readPoint:body.readPoint}:await authorizeOperationalDevice(client,config,request,body.eventType,{fallbackReadPoint:body.readPoint});
       const product = await client.query("SELECT id FROM products WHERE tenant_id=$1 AND id=$2 AND status='ACTIVE'", [request.principal.tenantId, body.productId]);
       if (!product.rowCount) {
         const error = new Error("Product not found or inactive"); error.statusCode = 404; error.code = "PRODUCT_NOT_FOUND"; throw error;
@@ -659,9 +661,9 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
         if(object.parent_id){const error=new Error("Object is already packed");error.statusCode=409;error.code="OBJECT_ALREADY_PACKED";throw error;}
       }
       const event = await client.query(
-        `INSERT INTO trace_events(tenant_id,event_type,object_id,shipment_id,business_document_id,actor_id,actor_role,organization_id,event_time,read_point,verification_status,metadata,idempotency_key)
-         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
-        [request.principal.tenantId,body.eventType,object.id,body.shipmentId||null,body.documentId||null,request.principal.id,request.principal.role,request.principal.organizationId,body.eventTime,body.readPoint,verification.status,body.metadata,key]
+        `INSERT INTO trace_events(tenant_id,event_type,object_id,shipment_id,business_document_id,actor_id,actor_role,organization_id,device_id,location_id,event_time,read_point,verification_status,metadata,idempotency_key)
+         VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        [request.principal.tenantId,body.eventType,object.id,body.shipmentId||null,body.documentId||null,request.principal.id,request.principal.role,request.principal.organizationId,device.deviceId,device.locationId,body.eventTime,device.readPoint,verification.status,body.metadata,key]
       );
       await client.query(
         `INSERT INTO event_outbox(tenant_id,aggregate_type,aggregate_id,event_type,payload)
@@ -684,7 +686,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
         const risk = await client.query(
           `INSERT INTO risk_cases(tenant_id,trace_event_id,risk_type,severity,evidence)
            VALUES($1,$2,$3,$4,$5) RETURNING *`,
-          [request.principal.tenantId,event.rows[0].id,verification.risk.type,verification.risk.severity,{objectCode:body.objectCode,shipmentId:body.shipmentId}]
+          [request.principal.tenantId,event.rows[0].id,verification.risk.type,verification.risk.severity,{objectCode:body.objectCode,shipmentId:body.shipmentId,deviceId:device.deviceId}]
         );
         riskCase = risk.rows[0];
       }

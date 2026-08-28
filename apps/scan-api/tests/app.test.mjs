@@ -23,7 +23,7 @@ test("health endpoints do not require authentication", async (t) => {
   const ready = await app.inject({ method:"GET", url:"/health/ready" });
   assert.equal(live.statusCode, 200);
   assert.equal(ready.statusCode, 200);
-  assert.equal(ready.json().schemaVersion, "019_recovery_code_idempotency.sql");
+  assert.equal(ready.json().schemaVersion, "020_device_event_authorization.sql");
 });
 
 test("readiness fails when the database schema is outdated", async (t) => {

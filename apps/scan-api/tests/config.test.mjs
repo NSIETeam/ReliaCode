@@ -33,6 +33,7 @@ test("production disables direct tenant registration by default", () => {
   const config=loadConfig({NODE_ENV:"production",DATABASE_URL:"postgres://db",AUTH_MODE:"local",ADMIN_PASSWORD_HASH:"scrypt$16384$8$1$00112233445566778899aabbccddeeff$00112233445566778899aabbccddeeff00112233445566778899aabbccddeeff",SESSION_FINGERPRINT_KEY:fingerprintKey,...emailRecovery});
   assert.equal(config.ALLOW_PUBLIC_REGISTRATION,false);
   assert.equal(config.ENABLE_LEGACY_SYNC_CODE_GENERATION,false);
+  assert.equal(config.REQUIRE_DEVICE_AUTHORIZATION,true);
 });
 
 test("webhook encryption key must decode to exactly 32 bytes", () => {

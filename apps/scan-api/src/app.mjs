@@ -20,7 +20,7 @@ import { hasFreshPasskeyVerification } from "./passkey-policy.mjs";
 
 export async function buildApp({ config, db }) {
   const app = Fastify({
-    logger: { level: config.LOG_LEVEL, redact: ["req.headers.authorization", "req.headers.cookie", "req.body.password", "req.body.newPassword", "req.body.token", "req.body.credential", "request.body.password", "request.body.newPassword", "request.body.token", "request.body.credential"] },
+    logger: { level: config.LOG_LEVEL, redact: ["req.headers.authorization", "req.headers.cookie", "req.headers.x-reliacode-device-token", "req.body.password", "req.body.newPassword", "req.body.token", "req.body.credential", "request.body.password", "request.body.newPassword", "request.body.token", "request.body.credential"] },
     trustProxy: config.TRUST_PROXY,
     bodyLimit: 5 * 1024 * 1024,
     requestIdHeader: "x-request-id",
@@ -38,7 +38,7 @@ export async function buildApp({ config, db }) {
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id", "X-ReliaCode-Principal", "X-CSRF-Token"],
+    allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id", "X-ReliaCode-Principal", "X-CSRF-Token", "X-ReliaCode-Device-Id", "X-ReliaCode-Device-Token"],
     exposedHeaders:["X-Request-Id","X-CSRF-Token"]
   });
   await app.register(rateLimit, { max: 2400, timeWindow: "1 minute", ban: 3, keyGenerator: (request) => request.ip });
