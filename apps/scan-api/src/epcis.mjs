@@ -8,12 +8,23 @@ function epc(code,baseUrl) {
 }
 
 export function toEpcisDocument(outboxPayload,{baseUrl}={}) {
-  const { event, object } = outboxPayload;
+  const { event, object,aggregation } = outboxPayload;
   if (event.event_type === "VERIFY") return null;
   if(!baseUrl)throw new Error("A GS1 Digital Link base URL is required for EPCIS serialization");
   const normalizedBase=String(baseUrl).replace(/\/$/,"");
   const offset = String(event.event_time).match(/([+-]\d\d:\d\d|Z)$/)?.[1] || "+00:00";
-  const base = {
+  const base = aggregation ? {
+    type:"AggregationEvent",
+    eventID:`urn:uuid:${event.id}`,
+    eventTime:event.event_time,
+    eventTimeZoneOffset:offset === "Z" ? "+00:00" : offset,
+    action:aggregation.action,
+    bizStep:`https://ref.gs1.org/cbv/BizStep-${bizSteps[event.event_type]}`,
+    readPoint:{ id:event.read_point },
+    bizLocation:{ id:`${normalizedBase}/locations/${encodeURIComponent(event.organization_id)}` },
+    parentID:epc(aggregation.parent.code,normalizedBase),
+    childEPCs:[epc(aggregation.child.code,normalizedBase)]
+  } : {
     type:"ObjectEvent",
     eventID:`urn:uuid:${event.id}`,
     eventTime:event.event_time,

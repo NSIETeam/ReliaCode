@@ -677,6 +677,15 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
         if(parentObject.current_organization_id&&parentObject.current_organization_id!==request.principal.organizationId){const error=new Error("Packaging parent is held by another organization");error.statusCode=404;error.code="OBJECT_NOT_FOUND";throw error;}
         if(object.parent_id){const error=new Error("Object is already packed");error.statusCode=409;error.code="OBJECT_ALREADY_PACKED";throw error;}
       }
+      if(body.eventType==="UNPACKING"){
+        if(!object.parent_id){const error=new Error("Object is not currently packed");error.statusCode=409;error.code="OBJECT_NOT_PACKED";throw error;}
+        const parent=await client.query("SELECT * FROM serialized_objects WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[request.principal.tenantId,object.parent_id]);
+        if(!parent.rowCount){const error=new Error("Packaging parent not found");error.statusCode=409;error.code="PACKAGING_RELATIONSHIP_INVALID";throw error;}parentObject=parent.rows[0];
+      }
+      if(parentObject&&businessDocument){
+        const parentLine=await client.query("SELECT expected FROM business_document_objects WHERE tenant_id=$1 AND document_id=$2 AND object_id=$3",[request.principal.tenantId,businessDocument.id,parentObject.id]);
+        if(!parentLine.rowCount||!parentLine.rows[0].expected){const error=new Error("The packaging parent is not expected on this business document");error.statusCode=409;error.code="PARENT_NOT_ON_DOCUMENT";throw error;}
+      }
       const event = await client.query(
         `INSERT INTO trace_events(tenant_id,event_type,object_id,shipment_id,business_document_id,actor_id,actor_role,organization_id,device_id,location_id,event_time,read_point,verification_status,metadata,idempotency_key)
          VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
@@ -689,7 +698,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       await client.query(
         `INSERT INTO event_outbox(tenant_id,aggregate_type,aggregate_id,event_type,payload)
          VALUES($1,'SERIALIZED_OBJECT',$2,'TRACE_EVENT_CAPTURED',$3)`,
-        [request.principal.tenantId,object.id,{ event:event.rows[0], object:{ id:object.id, code:object.code, level:object.level, productId:object.product_id } }]
+        [request.principal.tenantId,object.id,{ event:event.rows[0], object:{ id:object.id, code:object.code, level:object.level, productId:object.product_id },...(parentObject?{aggregation:{parent:{id:parentObject.id,code:parentObject.code,level:parentObject.level},child:{id:object.id,code:object.code,level:object.level},action:body.eventType==="PACKING"?"ADD":"DELETE"}}:{}) }]
       );
       if (stateApplied) {
         const parentId=body.eventType==="PACKING"?parentObject.id:body.eventType==="UNPACKING"?null:object.parent_id;
@@ -698,8 +707,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
           FROM jsonb_to_recordset($1::jsonb) AS x(object_id uuid,resulting_status text)
           WHERE so.tenant_id=$3 AND so.id=x.object_id`,[JSON.stringify(affectedObjects.slice(1).map(item=>({object_id:item.id,resulting_status:item.resulting_status}))),request.principal.organizationId,request.principal.tenantId]);
         if(body.eventType==="PACKING"||body.eventType==="UNPACKING"){
-          const relationshipParent=body.eventType==="PACKING"?parentObject.id:object.parent_id;
-          if(!relationshipParent){const error=new Error("Object is not currently packed");error.statusCode=409;error.code="OBJECT_NOT_PACKED";throw error;}
+          const relationshipParent=parentObject.id;
           await client.query(`INSERT INTO package_relationship_events(tenant_id,parent_object_id,child_object_id,action,business_document_id,trace_event_id,actor_id,occurred_at)
            VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[request.principal.tenantId,relationshipParent,object.id,body.eventType==="PACKING"?"ADD":"DELETE",body.documentId,event.rows[0].id,request.principal.id,body.eventTime]);
         }
