@@ -9,12 +9,25 @@
 - 一个可接收 EPCIS 2.0 Capture 的 OpenEPCIS 服务。
 - 一个带 TLS 的容器运行环境和 API 域名，例如 `https://api.reliacode.example`。
 
+## GitHub 自动部署
+
+`production-release` 工作流会针对同一个 Git 提交测试并发布 API/Web 镜像，然后运行数据库迁移、更新服务并检查 API 与 Web 健康状态。请在 GitHub 创建 `production` Environment，并配置：
+
+- Secret `DEPLOY_HOST`：生产服务器地址。
+- Secret `DEPLOY_USER`：仅具备该部署目录和 Docker 权限的系统用户；不建议长期使用 root。
+- Secret `DEPLOY_SSH_KEY`：该部署用户的专用私钥。
+- Secret `DEPLOY_KNOWN_HOSTS`：预先核验的服务器 SSH 主机公钥记录，禁止运行时跳过主机校验。
+- Variable `DEPLOY_PORT`：SSH 端口，默认 `22`。
+- Variable `DEPLOY_PATH`：部署目录，默认 `/opt/reliacode/deploy`。
+
+服务器上的 `DEPLOY_PATH` 必须预先保存不入库的 `.env` 和 `secrets/database_url.txt`。工作流只覆盖 `compose.production.yaml` 与 `release.sh`，不会覆盖生产密钥。建议给 `production` Environment 配置 required reviewers，使自动任务在真正更新服务器前等待人工批准。
+
 ## 发布顺序
 
 1. 复制 `.env.production.example` 为 `.env` 并填写真实公开配置。
 2. 在 `deploy/secrets/database_url.txt` 写入数据库连接串；该目录已被仓库根目录的 `secrets/` 规则排除。
 3. 固定部署镜像为提交标签，例如 `ghcr.io/nsieteam/reliacode-api:sha-<40位提交>`，不要长期依赖 `latest`。
-4. 执行一次迁移，再启动 API、outbox worker 和 Web：
+4. 自动工作流会执行以下等价发布流程；紧急情况下也可以手动运行：
 
 ```powershell
 docker compose --env-file .env -f compose.production.yaml pull
