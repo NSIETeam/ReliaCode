@@ -5,7 +5,7 @@ import { processCodeJobChunk } from "../src/code-job-worker.mjs";
 function database(handler){return{transaction:async(work)=>work({query:handler})};}
 
 test("code worker fails safely instead of emitting placeholder identifiers without a GTIN",async()=>{
-  const calls=[];const db=database(async(sql,params=[])=>{calls.push({sql,params});if(sql.includes("SELECT j.*"))return{rowCount:1,rows:[{id:"job-1",gtin:null}]};if(sql.includes("status='FAILED'"))return{rowCount:1,rows:[]};throw new Error(`Unexpected SQL: ${sql}`);});
+  const calls=[];const db=database(async(sql,params=[])=>{calls.push({sql,params});if(sql.includes("SELECT j.*"))return{rowCount:1,rows:[{id:"job-1",tenant_id:"tenant-1",quantity:10,generated_count:0,gtin:null}]};if(sql.includes("status='FAILED'")||sql.includes("UPDATE tenant_usage_monthly"))return{rowCount:1,rows:[]};throw new Error(`Unexpected SQL: ${sql}`);});
   assert.equal(await processCodeJobChunk(db,{GS1_DIGITAL_LINK_BASE_URL:"https://id.example.cn"}),true);
   assert.ok(calls.some(call=>call.sql.includes("status='FAILED'")));
   assert.equal(calls.some(call=>call.sql.includes("INSERT INTO serialized_objects")),false);

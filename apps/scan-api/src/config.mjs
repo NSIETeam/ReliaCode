@@ -17,6 +17,7 @@ const schema = z.object({
   DB_POOL_MAX: z.coerce.number().int().min(1).max(20).default(5),
   AUTH_MODE: z.enum(["oidc", "local", "development"]).default("oidc"),
   ALLOW_PUBLIC_REGISTRATION: boolean.optional(),
+  ENABLE_LEGACY_SYNC_CODE_GENERATION: boolean.optional(),
   OIDC_ISSUER_URL: z.string().url().optional(),
   OIDC_AUDIENCE: z.string().min(1).default("reliacode-api"),
   CORS_ORIGINS: z.string().default("http://localhost:4173"),
@@ -66,6 +67,7 @@ export function loadConfig(env = process.env) {
   return {
     ...config,
     ALLOW_PUBLIC_REGISTRATION: config.ALLOW_PUBLIC_REGISTRATION ?? config.NODE_ENV !== "production",
+    ENABLE_LEGACY_SYNC_CODE_GENERATION: config.ENABLE_LEGACY_SYNC_CODE_GENERATION ?? config.NODE_ENV !== "production",
     DATABASE_URL: databaseUrl,
     corsOrigins: [...new Set((config.CORS_ORIGINS + "," + (config.PUBLIC_ORIGINS || "")).split(",").map((value) => value.trim()).filter(Boolean))]
   };

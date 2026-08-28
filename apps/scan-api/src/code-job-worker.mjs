@@ -12,6 +12,8 @@ export async function processCodeJobChunk(db,config) {
     const job=selected.rows[0];
     if(!job.gtin){
       await client.query("UPDATE code_generation_jobs SET status='FAILED',last_error='Product requires a GTIN before production code generation',completed_at=now() WHERE id=$1",[job.id]);
+      const release=Math.max(0,Number(job.quantity)-Number(job.generated_count));
+      if(release)await client.query("UPDATE tenant_usage_monthly SET code_count=GREATEST(0,code_count-$1),updated_at=now() WHERE tenant_id=$2 AND usage_month=date_trunc('month',now())::date",[release,job.tenant_id]);
       return true;
     }
     let batchId=job.code_batch_id;

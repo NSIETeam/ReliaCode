@@ -568,6 +568,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
   });
 
   app.post("/api/v1/code-batches", async (request, reply) => {
+    if(!config.ENABLE_LEGACY_SYNC_CODE_GENERATION)return reply.code(410).send({code:"ASYNC_CODE_JOBS_REQUIRED",message:"Use /api/v1/code-jobs for production code generation"});
     requireCapability(request.principal, "codes:write");
     const body = codeBatchSchema.parse(request.body);
     const key = parseIdempotencyKey(request);
