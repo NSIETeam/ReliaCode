@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { buildSscc,gs1DigitalLink,gtinForDigitalLink,isValidGln,isValidGs1Mod10,isValidGtin,isValidSscc,ssccCapacity } from "../src/gs1.mjs";
+import { buildSscc,encodeGs1PathComponent,gs1DigitalLink,gtinForDigitalLink,isValidGln,isValidGs1Mod10,isValidGs1X,isValidGtin,isValidSscc,ssccCapacity } from "../src/gs1.mjs";
 
 test("GS1 Mod-10 validates supported GTIN and GLN keys",()=>{
   assert.equal(isValidGtin("12345670"),true);
@@ -30,4 +30,12 @@ test("SSCC allocation produces an 18-digit AI (00) key with a valid check digit"
   assert.equal(isValidSscc(sscc),true);
   assert.equal(ssccCapacity("0614141"),1_000_000_000n);
   assert.throws(()=>buildSscc("0614141",0,1_000_000_000n),/Invalid SSCC/);
+});
+
+test("GS1 X batch values enforce 20 characters and percent-encode reserved path symbols",()=>{
+  assert.equal(isValidGs1X("Lot/a+b?c"),true);
+  assert.equal(encodeGs1PathComponent("Lot/a+b?c"),"Lot%2Fa%2Bb%3Fc");
+  assert.equal(encodeGs1PathComponent("A!'()*"),"A%21%27%28%29%2A");
+  assert.equal(isValidGs1X("批次一"),false);
+  assert.equal(isValidGs1X("A".repeat(21)),false);
 });

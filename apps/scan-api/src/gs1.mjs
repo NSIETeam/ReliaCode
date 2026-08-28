@@ -36,3 +36,14 @@ export function gs1DigitalLink(baseUrl,ai,key) {
   if(!base)throw new Error("GS1 Digital Link base URL is required");
   return `${base}/${ai}/${key}`;
 }
+
+const gs1XSymbols=new Set([...`"-._!%&+,/()*';:<=>?`]);
+export function isValidGs1X(value,maxLength=20) {
+  const text=String(value||"");
+  return text.length>=1&&text.length<=maxLength&&[...text].every(character=>/[0-9A-Za-z]/.test(character)||gs1XSymbols.has(character));
+}
+
+export function encodeGs1PathComponent(value) {
+  if(!isValidGs1X(value))throw new Error("GS1 path value must use the X character set and contain at most 20 characters");
+  return encodeURIComponent(String(value)).replace(/[!'()*]/g,character=>`%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+}

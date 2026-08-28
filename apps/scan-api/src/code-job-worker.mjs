@@ -1,7 +1,7 @@
 import { loadConfig } from "./config.mjs";
 import { createDatabase } from "./db.mjs";
 import { pathToFileURL } from "node:url";
-import { gtinForDigitalLink,isValidGtin } from "./gs1.mjs";
+import { encodeGs1PathComponent,gtinForDigitalLink,isValidGs1X,isValidGtin } from "./gs1.mjs";
 
 export async function processCodeJobChunk(db,config) {
   return db.transaction(async(client)=>{
@@ -13,7 +13,7 @@ export async function processCodeJobChunk(db,config) {
     );
     if(!selected.rowCount)return false;
     const job=selected.rows[0];
-    const failure=job.identifier_scheme==="LEGACY_NONCONFORMING"?"Legacy nonconforming pallet jobs cannot generate production identifiers":job.identifier_scheme==="SSCC"&&(!job.gs1_company_prefix_snapshot||job.sscc_start_reference===null||job.sscc_start_reference===undefined)?"SSCC allocation snapshot is missing":job.identifier_scheme!=="SSCC"&&!isValidGtin(job.gtin)?"Product requires a valid GS1 GTIN before production code generation":null;
+    const failure=job.identifier_scheme==="LEGACY_NONCONFORMING"?"Legacy nonconforming pallet jobs cannot generate production identifiers":job.lot&&!isValidGs1X(job.lot)?"Batch/lot is not a valid GS1 AI (10) value":job.identifier_scheme==="SSCC"&&(!job.gs1_company_prefix_snapshot||job.sscc_start_reference===null||job.sscc_start_reference===undefined)?"SSCC allocation snapshot is missing":job.identifier_scheme!=="SSCC"&&!isValidGtin(job.gtin)?"Product requires a valid GS1 GTIN before production code generation":null;
     if(failure){
       await client.query("UPDATE code_generation_jobs SET status='FAILED',last_error=$2,completed_at=now() WHERE id=$1",[job.id,failure]);
       const release=Math.max(0,Number(job.quantity)-Number(job.generated_count));
@@ -40,12 +40,12 @@ export async function processCodeJobChunk(db,config) {
       [job.tenant_id,job.product_id,batchId,base,job.gs1_company_prefix_snapshot,job.sscc_extension_digit,job.sscc_start_reference,job.generated_count,job.level,job.lot,count]
     ):await client.query(
       `INSERT INTO serialized_objects(tenant_id,product_id,code_batch_id,code,level,lot,status)
-       SELECT $1,$2,$3,$4||'/01/'||$5||'/21/'||
+       SELECT $1,$2,$3,$4||'/01/'||$5||CASE WHEN $11::text IS NULL THEN '' ELSE '/10/'||$11 END||'/21/'||
          CASE WHEN $6='SEQUENTIAL' THEN lpad(($7+g)::text,12,'0')
               ELSE upper(substr(encode(digest($8::text||':'||($7+g)::text,'sha256'),'hex'),1,20)) END,
-         $9,$10,'COMMISSIONED' FROM generate_series(1,$11) g
+         $9,$10,'COMMISSIONED' FROM generate_series(1,$12) g
        ON CONFLICT (tenant_id,code) DO NOTHING RETURNING id`,
-      [job.tenant_id,job.product_id,batchId,base,gtinForDigitalLink(job.gtin),job.serial_rule,job.generated_count,job.id,job.level,job.lot,count]
+      [job.tenant_id,job.product_id,batchId,base,gtinForDigitalLink(job.gtin),job.serial_rule,job.generated_count,job.id,job.level,job.lot,job.lot?encodeGs1PathComponent(job.lot):null,count]
     );
     const generated=job.generated_count+inserted.rowCount;
     await client.query(

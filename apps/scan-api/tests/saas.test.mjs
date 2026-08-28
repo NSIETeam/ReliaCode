@@ -46,6 +46,12 @@ test("case code jobs are rejected before quota reservation when the case GTIN is
   assert.deepEqual(calls.find(call=>call.sql.startsWith("SELECT 1 FROM products p")).params,[principal.tenant_id,"33333333-3333-4333-8333-333333333333","CASE"]);
 });
 
+test("code jobs reject batch values outside GS1 AI (10) before database mutation",async(t)=>{
+  const db={query:async sql=>sql.includes("SELECT EXISTS")?{rowCount:1,rows:[{active:true}]}:assert.fail(`database mutation was attempted: ${sql}`)},app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject({method:"POST",url:"/api/v1/code-jobs",headers:{...headers,"idempotency-key":"invalid-lot-test-001"},payload:{productId:"33333333-3333-4333-8333-333333333333",level:"ITEM",quantity:10,serialRule:"SEQUENTIAL",lot:"中文批次",auditReason:"validate lot qualifier"}});
+  assert.equal(response.statusCode,400);
+});
+
 test("random pallet jobs are rejected because SSCC references use governed sequential allocation",async(t)=>{
   const mutations=[],db={query:async sql=>{if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};mutations.push(sql);throw new Error(`Unexpected SQL: ${sql}`);}};
   const app=await buildApp({config,db});t.after(()=>app.close());

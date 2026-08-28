@@ -19,6 +19,14 @@ test("code worker resumes an existing batch, pads GTIN for Digital Link, and com
   assert.equal(updates[0][1],5);
 });
 
+test("SGTIN places an encoded AI (10) lot before AI (21) serial",async()=>{
+  let insert;const job={id:"job-lot",tenant_id:"tenant-1",product_id:"product-1",code_batch_id:"batch-1",requested_by:"user-1",level:"ITEM",identifier_scheme:"SGTIN",quantity:1,serial_rule:"SEQUENTIAL",lot:"Lot/a+b",generated_count:0,gtin:"06912345678902"};
+  const db=database(async(sql,params=[])=>{if(sql.includes("SELECT j.*"))return{rowCount:1,rows:[job]};if(sql.includes("INSERT INTO serialized_objects")){insert={sql,params};return{rowCount:1,rows:[{id:"one"}]};}if(sql.includes("UPDATE code_generation_jobs SET generated_count"))return{rowCount:1,rows:[]};throw new Error(`Unexpected SQL: ${sql}`);});
+  await processCodeJobChunk(db,{GS1_DIGITAL_LINK_BASE_URL:"https://id.reliacode.cn"});
+  assert.match(insert.sql,/\/10\/.*\/21\//);
+  assert.equal(insert.params[10],"Lot%2Fa%2Bb");
+});
+
 test("worker query selects the GTIN for the job packaging level",async()=>{
   let selection;const db=database(async(sql)=>{selection=sql;return{rowCount:0,rows:[]};});
   assert.equal(await processCodeJobChunk(db,{GS1_DIGITAL_LINK_BASE_URL:"https://id.reliacode.cn"}),false);

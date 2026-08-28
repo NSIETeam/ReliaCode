@@ -315,6 +315,7 @@ function renderCodes() {
   if(gs1Panel)$("#codes").insertAdjacentHTML("afterbegin",gs1Panel);
   if($("#gs1-settings-form"))$("#gs1-settings-form").onsubmit=saveGs1Settings;
   if(domainApi&&$("#product-form [name=gtin]"))$("#product-form [name=gtin]").closest("label").insertAdjacentHTML("afterend",'<label>箱级 GTIN（可选）<input name="caseGtin" maxlength="20" inputmode="numeric" /></label>');
+  if(domainApi&&$("#batch-form [name=lot]"))$("#batch-form [name=lot]").maxLength=20;
   $("#product-form").onsubmit=addProduct;
   if($("#batch-form")) $("#batch-form").onsubmit=generateBatch;
   document.querySelectorAll("[data-download]").forEach((button)=>button.onclick=()=>exportBatch(button.dataset.download));

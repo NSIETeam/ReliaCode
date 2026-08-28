@@ -1,1 +1,1 @@
-export const REQUIRED_SCHEMA_VERSION = "023_packaging_gtins.sql";
+export const REQUIRED_SCHEMA_VERSION = "024_gs1_lot_qualifier.sql";

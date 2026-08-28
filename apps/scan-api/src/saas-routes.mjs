@@ -4,7 +4,7 @@ import { requireCapability, hashPassword, hashToken } from "./auth.mjs";
 import { getIdempotentResponse, lockIdempotencyKey, requestHash, saveIdempotentResponse } from "./idempotency.mjs";
 import { parseIdempotencyKey } from "./schemas.mjs";
 import { createObjectStorage,presignCodeExport } from "./object-storage.mjs";
-import { isValidGln,isValidGtin,ssccCapacity } from "./gs1.mjs";
+import { isValidGln,isValidGs1X,isValidGtin,ssccCapacity } from "./gs1.mjs";
 
 const email = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
 const reason = z.string().trim().min(3).max(500);
@@ -223,7 +223,7 @@ export function registerSaasRoutes(app, { db,config }) {
   });
   app.post("/api/v1/code-jobs",async(request,reply)=>{
     requireCapability(request.principal,"codes:write");
-    const body=z.object({productId:uuid,level:z.enum(["ITEM","CASE","PALLET"]),quantity:z.number().int().min(1).max(1000000),serialRule:z.enum(["RANDOM","SEQUENTIAL"]),lot:z.string().trim().max(120).optional(),auditReason:reason}).superRefine((value,ctx)=>{if(value.level==="PALLET"&&value.serialRule!=="SEQUENTIAL")ctx.addIssue({code:"custom",path:["serialRule"],message:"SSCC pallet allocation requires a sequential serial rule"});}).parse(request.body);
+    const body=z.object({productId:uuid,level:z.enum(["ITEM","CASE","PALLET"]),quantity:z.number().int().min(1).max(1000000),serialRule:z.enum(["RANDOM","SEQUENTIAL"]),lot:z.string().trim().refine(value=>isValidGs1X(value),"Batch/lot must contain 1 to 20 GS1 X characters").optional(),auditReason:reason}).superRefine((value,ctx)=>{if(value.level==="PALLET"&&value.serialRule!=="SEQUENTIAL")ctx.addIssue({code:"custom",path:["serialRule"],message:"SSCC pallet allocation requires a sequential serial rule"});}).parse(request.body);
     const response=await command(db,request,"CODE_JOB_CREATE",body,async(client,key)=>{
       const product=await client.query(`SELECT 1 FROM products p WHERE p.tenant_id=$1 AND p.id=$2 AND p.status='ACTIVE'
         AND ($3='PALLET' OR EXISTS(SELECT 1 FROM product_trade_items pti WHERE pti.tenant_id=p.tenant_id AND pti.product_id=p.id AND pti.level=$3))`,[request.principal.tenantId,body.productId,body.level]); if(!product.rowCount) notFound("Product or packaging GTIN not found");
