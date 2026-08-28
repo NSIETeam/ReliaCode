@@ -1,1 +1,1 @@
-export const REQUIRED_SCHEMA_VERSION = "012_webhook_delivery_runtime.sql";
+export const REQUIRED_SCHEMA_VERSION = "013_webhook_replay_control.sql";

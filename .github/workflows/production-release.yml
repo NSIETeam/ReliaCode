@@ -60,7 +60,7 @@ jobs:
           npm run migrate --workspace @reliacode/scan-api
       - name: Validate checked-in SQL migrations
         run: |
-          test -s apps/scan-api/migrations/012_webhook_delivery_runtime.sql
+          test -s apps/scan-api/migrations/013_webhook_replay_control.sql
           node --check apps/scan-api/src/code-job-worker.mjs
       - run: npm audit --workspace @reliacode/scan-api --omit=dev --audit-level=high
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
