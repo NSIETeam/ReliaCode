@@ -1,0 +1,28 @@
+name: dast
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  zap-baseline:
+    name: OWASP ZAP passive baseline
+    runs-on: ubuntu-latest
+    environment: security-test
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - name: Validate isolated target
+        env:
+          DAST_TARGET_URL: ${{ secrets.DAST_TARGET_URL }}
+        run: |
+          set -euo pipefail
+          test -n "$DAST_TARGET_URL"
+          case "$DAST_TARGET_URL" in https://*) ;; *) echo 'DAST target must use HTTPS'; exit 1;; esac
+      - name: Run ZAP baseline and fail on alerts
+        uses: zaproxy/action-baseline@de8ad967d3548d44ef623df22cf95c3b0baf8b25 # v0.15.0
+        with:
+          target: ${{ secrets.DAST_TARGET_URL }}
+          docker_name: zaproxy/zap-stable:2.17.0@sha256:71db37cd5b75663b35758d10aaec05bf6fbac23f5020e3046c70e628a5f84efa
+          fail_action: true
+          allow_issue_writing: false
+          cmd_options: -a -m 5 -T 10

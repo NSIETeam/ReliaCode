@@ -40,6 +40,7 @@
 - PostgreSQL 主库切换、API 重启、OpenEPCIS 停机时不丢事件。
 - 关键接口 P95 小于 500ms（不含批量生码/导出作业），错误率低于 0.1%。
 - GitHub `performance` Environment 只连接隔离压测租户。手动运行 `production-scale-gates` 的三个门禁：`scan` 至少 30 次/秒并验证幂等、P95 <500ms、错误率 ≤0.1%；`million-codes` 必须生成恰好 1,000,000 个码（压测租户套餐额度必须预先覆盖本月既有用量加一百万）；`ten-million-query` 会先使用只读数据库凭据证明租户事件数不少于 10,000,000，再验证公共履历查询 P95 <500ms。不得对真实客户租户运行写入型门禁，`PERF_DATABASE_URL` 不得拥有写权限、超级用户或 `BYPASSRLS`。
+- `security-analysis` 在主分支、PR 和每周计划中运行 CodeQL `security-extended` 与全 Git 历史 Gitleaks；Gitleaks 下载包校验官方 SHA-256。`dast` 只允许通过 `security-test` Environment 手动指向隔离 HTTPS 环境，使用固定的 ZAP 2.17.0 amd64 镜像摘要并在任何未基线化告警时失败。DAST 不是租户越权渗透测试的替代品，后者仍需独立签字报告。
 - outbox 正常积压小于 1 分钟，超过 5 分钟告警。
 - 备份恢复演练和召回演练都有签字记录。
 
