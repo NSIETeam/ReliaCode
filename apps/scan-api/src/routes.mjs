@@ -779,9 +779,16 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
       const nextStatus = body.action === "APPROVE" ? "APPROVED" : body.action === "REJECT" ? "REJECTED" : "HELD";
       const changed = await client.query(
         `UPDATE risk_cases SET status=$1,resolved_at=CASE WHEN $1='HELD' THEN NULL ELSE now() END,
-         resolved_by=CASE WHEN $1='HELD' THEN NULL ELSE $2 END,resolution_reason=$3 WHERE id=$4 RETURNING *`,
-        [nextStatus, request.principal.id, body.reason, found.rows[0].id]
+         resolved_by=CASE WHEN $1='HELD' THEN NULL ELSE $2 END,resolution_reason=$3 WHERE tenant_id=$4 AND id=$5 RETURNING *`,
+        [nextStatus, request.principal.id, body.reason,request.principal.tenantId, found.rows[0].id]
       );
+      await enqueueWebhookDeliveries(client, request.principal.tenantId, "RISK_CASE_UPDATED", {
+        riskCaseId: found.rows[0].id,
+        riskType: found.rows[0].risk_type,
+        severity: found.rows[0].severity,
+        status: nextStatus,
+        reason: body.reason
+      });
       await audit(client, request, operation, "RISK_CASE", found.rows[0].id, found.rows[0], changed.rows[0]);
       await saveIdempotentResponse(client,{tenantId:request.principal.tenantId,key,operation,hash,status:200,body:changed.rows[0]});
       return { status:200, body:changed.rows[0] };

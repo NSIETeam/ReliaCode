@@ -5,10 +5,10 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ReliaCode（可靠码）运营端</title>
     <link rel="icon" type="image/svg+xml" href="favicon.svg" />
-    <link rel="stylesheet" href="styles.css" />
-    <link rel="stylesheet" href="design.css" />
-    <link rel="stylesheet" href="figma-redesign.css" />
-    <link rel="stylesheet" href="brand-console.css" />
+    <link rel="stylesheet" href="styles.css?v=20260828-login" />
+    <link rel="stylesheet" href="design.css?v=20260828-login" />
+    <link rel="stylesheet" href="figma-redesign.css?v=20260828-login" />
+    <link rel="stylesheet" href="brand-console.css?v=20260828-login" />
   </head>
   <body>
     <div class="app-shell">
@@ -30,6 +30,7 @@
           <button class="nav-link brand-only" data-view="campaigns" data-capability="campaigns:write" data-icon="campaign"><span>奖励活动</span></button>
           <button class="nav-link brand-only" data-view="ledger" data-capability="ledger:read,ledger:read:self" data-icon="ledger"><span>奖励账本</span></button>
           <button class="nav-link brand-only" data-view="risk" data-capability="risks:review" data-icon="risk"><span>风险处置</span><span id="risk-badge" class="nav-badge">0</span></button>
+          <button class="nav-link brand-only" data-view="recalls" data-capability="recalls:write" data-icon="risk"><span>召回中心</span></button>
         </nav>
         <div class="sidebar-note"><b>本地工作区</b><br />首次打开后创建品牌工作区，不包含预置业务数据。</div>
       </aside>
@@ -62,6 +63,7 @@
         <section id="campaigns" class="view"></section>
         <section id="ledger" class="view"></section>
         <section id="risk" class="view"></section>
+        <section id="recalls" class="view"></section>
       </main>
     </div>
     <div id="agent-backdrop" class="agent-backdrop" hidden></div>
@@ -89,8 +91,8 @@
       </section>
     </div>
     <script src="runtime-config.js"></script>
-    <script src="vendor/qrcode.js"></script>
-    <script src="vendor/jsQR.js"></script>
-    <script src="app.js"></script>
+    <script src="vendor/qrcode.js?v=20260828-login"></script>
+    <script src="vendor/jsQR.js?v=20260828-login"></script>
+    <script src="app.js?v=20260828-agent1"></script>
   </body>
 </html>

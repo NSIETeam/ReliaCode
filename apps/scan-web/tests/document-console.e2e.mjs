@@ -8,7 +8,7 @@ const browser=await chromium.launch({headless:true}),context=await browser.newCo
 await page.route("**/runtime-config.js",route=>route.fulfill({contentType:"application/javascript",body:"window.RELIACODE_CONFIG=Object.freeze({apiBaseUrl:'',persistentWorkspace:false,domainApi:true});"}));
 await page.route("**/api/**",async route=>{const request=route.request(),path=new URL(request.url()).pathname,json=body=>route.fulfill({status:200,contentType:"application/json",headers:{"x-csrf-token":"csrf-admin-test"},body:JSON.stringify(body)});
   if(path==="/api/auth/session")return json({csrfToken:"csrf-admin-test",user:{id:ids.user,name:"Brand Admin",tenantId:ids.tenant,organizationId:ids.organization,organizationName:"Brand 01",role:"BRAND_ADMIN",capabilities:["objects:read","events:read","documents:write"]}});
-  if(path==="/api/v1/products"||path==="/api/v1/devices"||path==="/api/v1/trace-events")return json({items:[],nextCursor:null});
+  if(path==="/api/v1/products"||path==="/api/v1/devices"||path==="/api/v1/trace-events"||path==="/api/v1/recalls")return json({items:[],nextCursor:null});
   if(path==="/api/v1/organizations")return json({items:[{id:ids.organization,name:"Brand 01",type:"BRAND",status:"ACTIVE"}]});
   if(path==="/api/v1/documents"&&request.method()==="GET")return json({items:[document]});
   if(path===`/api/v1/documents/${ids.document}/objects`&&request.method()==="GET")return json({items:lines});

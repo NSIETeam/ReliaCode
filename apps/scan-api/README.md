@@ -22,6 +22,8 @@ npm start
 
 生产业务事件强制使用已注册设备。设备注册要求绑定同租户、同组织的活动网点，网点必须具备校验位有效的 GLN；一次性设备令牌只在首次响应显示，数据库仅保存哈希，幂等重试不会重新泄露令牌。事件请求通过 `X-ReliaCode-Device-Id` 和 `X-ReliaCode-Device-Token` 认证，设备必须处于活动状态且获准执行对应事件类型。服务端从设备绑定网点生成 AI (414) GS1 Digital Link 读取点并写入事件，忽略客户端自报位置；撤销设备后后续作业立即统一返回未授权。开发环境可显式关闭该门禁，生产 Compose 固定启用。
 
+风险与召回治理使用租户范围领域接口：`GET /api/v1/risk-cases` 支持状态、严重度和游标分页，`POST /api/v1/risk-cases/:id/decisions` 以幂等命令执行继续冻结、通过或拒绝；`GET/POST /api/v1/recalls`、`POST /api/v1/recalls/:id/activate` 和 `GET /api/v1/recalls/:id/objects` 管理召回及其不可变对象快照。空范围禁止激活，风险处置和召回激活都会写审计并排队签名 Webhook。历史事件不被回写，纠错必须提交补偿事件。
+
 状态变化事件必须引用已批准或执行中的业务单据。单据在 `DRAFT` 状态通过 `POST /api/v1/documents/:id/objects` 添加预期序列对象，通过 `DELETE /api/v1/documents/:id/objects/:objectId` 删除误录明细；每条明细保存加入当时的对象快照，且两种修改均要求幂等键和审计理由。空单据不能审批，审批后明细被冻结；事件对象不在单据中或被标记为非预期时返回 `OBJECT_NOT_ON_DOCUMENT`，不会写入追溯事件。跨租户单据、对象和明细统一按不存在处理。
 
 单据明细以 `ACTION` 和 `CONTEXT` 区分待执行对象与仅用于授权/证明包装关系的对象。审批至少要求一条预期 `ACTION` 行；已验证的状态事件原子写回 `fulfilled_event_id/fulfilled_at`，并在首条履约时把 `APPROVED` 单据推进到 `IN_PROGRESS`。同一动作行不能重复消费，任何预期动作行尚未履约时禁止将单据标记为 `COMPLETED`。包装父箱通常应录为 `CONTEXT`，子件或本次箱级动作的根对象录为 `ACTION`。
