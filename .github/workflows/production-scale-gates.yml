@@ -1,0 +1,38 @@
+name: production-scale-gates
+on:
+  workflow_dispatch:
+    inputs:
+      gate:
+        description: Isolated performance gate to run
+        required: true
+        type: choice
+        options: [scan, million-codes, ten-million-query]
+permissions:
+  contents: read
+jobs:
+  performance:
+    runs-on: ubuntu-latest
+    environment: performance
+    timeout-minutes: 150
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Run selected production-scale gate
+        env:
+          PERF_GATE: ${{ inputs.gate }}
+          PERF_BASE_URL: ${{ secrets.PERF_BASE_URL }}
+          PERF_AUTHORIZATION: ${{ secrets.PERF_AUTHORIZATION }}
+          PERF_COOKIE: ${{ secrets.PERF_COOKIE }}
+          PERF_CSRF_TOKEN: ${{ secrets.PERF_CSRF_TOKEN }}
+          PERF_OBJECT_CODE: ${{ secrets.PERF_OBJECT_CODE }}
+          PERF_PRODUCT_ID: ${{ secrets.PERF_PRODUCT_ID }}
+          PERF_PUBLIC_ID: ${{ secrets.PERF_PUBLIC_ID }}
+          PERF_TENANT_ID: ${{ secrets.PERF_TENANT_ID }}
+          PERF_DATABASE_URL: ${{ secrets.PERF_DATABASE_URL }}
+          PERF_DATABASE_SSL: ${{ vars.PERF_DATABASE_SSL || 'true' }}
+        run: node apps/scan-api/tests/production-scale-gates.mjs

@@ -40,7 +40,7 @@ export async function buildApp({ config, db }) {
     allowedHeaders: ["Authorization", "Content-Type", "Idempotency-Key", "X-Request-Id", "X-ReliaCode-Principal", "X-CSRF-Token"],
     exposedHeaders:["X-Request-Id","X-CSRF-Token"]
   });
-  await app.register(rateLimit, { max: 300, timeWindow: "1 minute", ban: 3, keyGenerator: (request) => request.ip });
+  await app.register(rateLimit, { max: 2400, timeWindow: "1 minute", ban: 3, keyGenerator: (request) => request.ip });
 
   app.addHook("onRequest",(_request,_reply,done)=>runWithDatabaseContext(done));
 

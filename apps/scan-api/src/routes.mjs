@@ -313,7 +313,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
     return { authenticated:true,csrfToken:session.csrf,user:result.user,invitationAccepted:true };
   });
 
-  app.post('/api/auth/register', async (request, reply) => {
+  app.post('/api/auth/register',{config:{rateLimit:{max:10,timeWindow:'1 hour'}}}, async (request, reply) => {
     if (config.AUTH_MODE !== 'local' || !config.ALLOW_PUBLIC_REGISTRATION) return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
     const now=Date.now(), key='register:'+request.ip;
     const attempt=loginAttempts.get(key) || { count:0, resetAt:now+300000 };
@@ -349,7 +349,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
     return reply.code(201).send({ authenticated:true,csrfToken:session.csrf,user:{ id:user.id,name:user.username,email:user.email,role:'BRAND_ADMIN',capabilities:ROLE_CAPABILITIES.BRAND_ADMIN,tenantId:user.tenantId,organizationId:user.organizationId,organizationName:created.organizationName } });
   });
 
-  app.post('/api/auth/login', async (request, reply) => {
+  app.post('/api/auth/login',{config:{rateLimit:{max:20,timeWindow:'5 minutes'}}}, async (request, reply) => {
     if (config.AUTH_MODE !== 'local') return reply.code(404).send({ code:'NOT_FOUND', message:'Route not found' });
     const now = Date.now();
     const key = request.ip;
@@ -499,7 +499,7 @@ export function registerRoutes(app, { db, config, loginAttempts }) {
     if (result.conflict) return reply.code(409).send({ code:'WORKSPACE_VERSION_CONFLICT', message:'Workspace was changed by another session', current:result.current });
     return { workspace:result.saved.workspace, version:Number(result.saved.version), updatedAt:result.saved.updated_at };
   });
-  app.get("/api/public/v1/objects/:publicId", async (request, reply) => {
+  app.get("/api/public/v1/objects/:publicId",{config:{rateLimit:{max:300,timeWindow:"1 minute"}}}, async (request, reply) => {
     const publicId = z.string().uuid().parse(request.params.publicId);
     const result = await db.query(
       `SELECT so.id,so.public_id,so.level,so.lot,so.status,so.created_at,so.tenant_id,p.gtin,p.name product_name,
