@@ -4,7 +4,7 @@ import { requireCapability, hashPassword, hashToken } from "./auth.mjs";
 import { getIdempotentResponse, lockIdempotencyKey, requestHash, saveIdempotentResponse } from "./idempotency.mjs";
 import { parseIdempotencyKey } from "./schemas.mjs";
 import { createObjectStorage,presignCodeExport } from "./object-storage.mjs";
-import { isValidGln,isValidGtin } from "./gs1.mjs";
+import { isValidGln,isValidGtin,ssccCapacity } from "./gs1.mjs";
 
 const email = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
 const reason = z.string().trim().min(3).max(500);
@@ -119,6 +119,26 @@ export function registerSaasRoutes(app, { db,config }) {
 
   app.post("/api/v1/platform/tenants/:id/status",async(request,reply)=>{requireCapability(request.principal,"platform:tenants:write");const tenantId=uuid.parse(request.params.id),body=z.object({status:z.enum(["ACTIVE","SUSPENDED"]),reason}).parse(request.body);const response=await platformCommand(db,request,"TENANT_STATUS_CHANGE",{tenantId,...body},async client=>{const found=await client.query("SELECT id,name,status,plan,suspended_reason FROM tenants WHERE id=$1 FOR UPDATE",[tenantId]);if(!found.rowCount)notFound("Tenant not found");if(found.rows[0].status===body.status){const error=new Error("Tenant already has the requested status");error.statusCode=409;error.code="INVALID_STATE";throw error;}const changed=await client.query("UPDATE tenants SET status=$1,suspended_reason=$2 WHERE id=$3 RETURNING id,name,status,plan,suspended_reason",[body.status,body.status==="SUSPENDED"?body.reason:null,tenantId]);if(body.status==="SUSPENDED")await client.query("UPDATE admin_sessions SET revoked_at=now(),revoked_by=$1,revocation_reason=$2 WHERE tenant_id=$3 AND revoked_at IS NULL",[request.principal.id,body.reason,tenantId]);await client.query(`INSERT INTO platform_audit_log(actor_id,action,entity_type,entity_id,reason,request_id,before_state,after_state) VALUES($1,'TENANT_STATUS_CHANGE','TENANT',$2,$3,$4,$5,$6)`,[request.principal.id,tenantId,body.reason,request.id,found.rows[0],changed.rows[0]]);return{value:changed.rows[0]};});return reply.code(response.status).send(response.body);});
 
+  app.get("/api/v1/tenant/gs1-settings",async(request)=>{
+    requireCapability(request.principal,"tenant:manage");
+    const result=await db.query("SELECT gs1_company_prefix,sscc_next_reference,updated_at FROM tenant_settings WHERE tenant_id=$1",[request.principal.tenantId]);
+    if(!result.rowCount)notFound("Tenant settings not found");
+    const row=result.rows[0],prefix=row.gs1_company_prefix;
+    return{gs1CompanyPrefix:prefix,ssccNextReference:String(row.sscc_next_reference),ssccCapacity:prefix?ssccCapacity(prefix).toString():null,updatedAt:row.updated_at};
+  });
+  app.post("/api/v1/tenant/gs1-settings",async(request,reply)=>{
+    requireCapability(request.principal,"tenant:manage");
+    const body=z.object({gs1CompanyPrefix:z.string().regex(/^\d{4,12}$/),auditReason:reason}).parse(request.body);
+    const response=await command(db,request,"TENANT_GS1_SETTINGS_UPDATE",body,async client=>{
+      const found=await client.query("SELECT gs1_company_prefix,sscc_next_reference,updated_at FROM tenant_settings WHERE tenant_id=$1 FOR UPDATE",[request.principal.tenantId]);
+      if(!found.rowCount)notFound("Tenant settings not found");
+      if(BigInt(found.rows[0].sscc_next_reference)>0n&&found.rows[0].gs1_company_prefix&&found.rows[0].gs1_company_prefix!==body.gs1CompanyPrefix){const error=new Error("GS1 Company Prefix cannot change after SSCC allocation has started");error.statusCode=409;error.code="GS1_PREFIX_LOCKED";throw error;}
+      const changed=await client.query("UPDATE tenant_settings SET gs1_company_prefix=$1,updated_at=now() WHERE tenant_id=$2 RETURNING gs1_company_prefix,sscc_next_reference,updated_at",[body.gs1CompanyPrefix,request.principal.tenantId]);
+      await tenantAudit(client,request,"TENANT_GS1_SETTINGS_UPDATE","TENANT_SETTINGS",request.principal.tenantId,found.rows[0],changed.rows[0]);
+      const row=changed.rows[0];return{value:{gs1CompanyPrefix:row.gs1_company_prefix,ssccNextReference:String(row.sscc_next_reference),ssccCapacity:ssccCapacity(row.gs1_company_prefix).toString(),updatedAt:row.updated_at}};
+    });return reply.code(response.status).send(response.body);
+  });
+
   app.get("/api/v1/products", async (request) => {
     requireCapability(request.principal,"objects:read");
     const query=pageQuery.extend({ status:z.enum(["ACTIVE","INACTIVE"]).optional(), q:z.string().trim().max(100).optional() }).parse(request.query);
@@ -179,14 +199,14 @@ export function registerSaasRoutes(app, { db,config }) {
   });
 
   app.get("/api/v1/code-jobs",async(request)=>{
-    requireCapability(request.principal,"codes:write");const query=pageQuery.parse(request.query),cursor=cursorDecode(query.cursor);const result=await db.query(`SELECT id,product_id,code_batch_id,requested_by,approved_by,level,quantity,serial_rule,lot,status,generated_count,last_error,
+    requireCapability(request.principal,"codes:write");const query=pageQuery.parse(request.query),cursor=cursorDecode(query.cursor);const result=await db.query(`SELECT id,product_id,code_batch_id,requested_by,approved_by,level,identifier_scheme,quantity,serial_rule,lot,status,generated_count,last_error,
       export_status,export_attempts,export_last_error,export_completed_at,output_size_bytes,output_sha256,created_at,started_at,completed_at
       FROM code_generation_jobs WHERE tenant_id=$1 AND ($2::timestamptz IS NULL OR (created_at,id)<($2,$3::uuid))
       ORDER BY created_at DESC,id DESC LIMIT $4`,[request.principal.tenantId,cursor?.[0]||null,cursor?.[1]||null,query.limit+1]);return page(result.rows,query.limit);
   });
   app.post("/api/v1/code-jobs",async(request,reply)=>{
     requireCapability(request.principal,"codes:write");
-    const body=z.object({productId:uuid,level:z.enum(["ITEM","CASE","PALLET"]),quantity:z.number().int().min(1).max(1000000),serialRule:z.enum(["RANDOM","SEQUENTIAL"]),lot:z.string().trim().max(120).optional(),auditReason:reason}).parse(request.body);
+    const body=z.object({productId:uuid,level:z.enum(["ITEM","CASE","PALLET"]),quantity:z.number().int().min(1).max(1000000),serialRule:z.enum(["RANDOM","SEQUENTIAL"]),lot:z.string().trim().max(120).optional(),auditReason:reason}).superRefine((value,ctx)=>{if(value.level==="PALLET"&&value.serialRule!=="SEQUENTIAL")ctx.addIssue({code:"custom",path:["serialRule"],message:"SSCC pallet allocation requires a sequential serial rule"});}).parse(request.body);
     const response=await command(db,request,"CODE_JOB_CREATE",body,async(client,key)=>{
       const product=await client.query("SELECT 1 FROM products WHERE tenant_id=$1 AND id=$2 AND status='ACTIVE'",[request.principal.tenantId,body.productId]); if(!product.rowCount) notFound("Product not found");
       await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",["code-quota:"+request.principal.tenantId]);
@@ -195,7 +215,7 @@ export function registerSaasRoutes(app, { db,config }) {
       if(BigInt(quota.rows[0]?.used_codes||0)+BigInt(body.quantity)>BigInt(quota.rows[0]?.max_codes||0)){await client.query(`INSERT INTO tenant_entitlement_audit(tenant_id,actor_id,action,usage_month,usage_delta,reason_code,request_id) VALUES($1,$2,'QUOTA_BLOCKED',date_trunc('month',now())::date,$3,'MONTHLY_CODE_LIMIT',$4)`,[request.principal.tenantId,request.principal.id,{requestedCodes:body.quantity},request.id]);return{status:429,value:{code:"MONTHLY_CODE_LIMIT",message:"Monthly code quota would be exceeded"}};}
       await client.query(`INSERT INTO tenant_usage_monthly(tenant_id,usage_month,code_count) VALUES($1,date_trunc('month',now())::date,$2)
         ON CONFLICT(tenant_id,usage_month) DO UPDATE SET code_count=tenant_usage_monthly.code_count+EXCLUDED.code_count,updated_at=now()`,[request.principal.tenantId,body.quantity]);
-      const created=await client.query(`INSERT INTO code_generation_jobs(tenant_id,product_id,requested_by,level,quantity,serial_rule,lot,idempotency_key) VALUES($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,[request.principal.tenantId,body.productId,request.principal.id,body.level,body.quantity,body.serialRule,body.lot||null,key]);
+      const created=await client.query(`INSERT INTO code_generation_jobs(tenant_id,product_id,requested_by,level,quantity,serial_rule,lot,idempotency_key,identifier_scheme) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING *`,[request.principal.tenantId,body.productId,request.principal.id,body.level,body.quantity,body.serialRule,body.lot||null,key,body.level==="PALLET"?"SSCC":"SGTIN"]);
       await tenantAudit(client,request,"CODE_JOB_CREATE","CODE_GENERATION_JOB",created.rows[0].id,null,created.rows[0]); return {status:202,value:created.rows[0]};
     }); return reply.code(response.status).send(response.body);
   });
@@ -204,7 +224,16 @@ export function registerSaasRoutes(app, { db,config }) {
     const response=await command(db,request,"CODE_JOB_APPROVE",{id,...body},async(client)=>{
       const found=await client.query("SELECT * FROM code_generation_jobs WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[request.principal.tenantId,id]); if(!found.rowCount) notFound();
       if(found.rows[0].status!=="PENDING_APPROVAL"){const e=new Error("Job cannot be approved in its current state");e.statusCode=409;e.code="INVALID_STATE";throw e;}
-      const changed=await client.query("UPDATE code_generation_jobs SET status='QUEUED',approved_by=$1 WHERE id=$2 RETURNING *",[request.principal.id,id]);
+      let changed;
+      if(found.rows[0].identifier_scheme==="SSCC"){
+        const settings=await client.query("SELECT gs1_company_prefix,sscc_next_reference FROM tenant_settings WHERE tenant_id=$1 FOR UPDATE",[request.principal.tenantId]);
+        const prefix=settings.rows[0]?.gs1_company_prefix;if(!prefix){const error=new Error("Configure the tenant GS1 Company Prefix before approving pallet codes");error.statusCode=409;error.code="GS1_COMPANY_PREFIX_REQUIRED";throw error;}
+        const start=BigInt(settings.rows[0].sscc_next_reference),end=start+BigInt(found.rows[0].quantity),capacity=ssccCapacity(prefix);
+        if(end>capacity){const error=new Error("The tenant SSCC serial reference capacity is exhausted");error.statusCode=409;error.code="SSCC_CAPACITY_EXHAUSTED";throw error;}
+        await client.query("UPDATE tenant_settings SET sscc_next_reference=$1,updated_at=now() WHERE tenant_id=$2",[end.toString(),request.principal.tenantId]);
+        changed=await client.query("UPDATE code_generation_jobs SET status='QUEUED',approved_by=$1,gs1_company_prefix_snapshot=$2,sscc_extension_digit=0,sscc_start_reference=$3 WHERE id=$4 RETURNING *",[request.principal.id,prefix,start.toString(),id]);
+      }else if(found.rows[0].identifier_scheme==="SGTIN") changed=await client.query("UPDATE code_generation_jobs SET status='QUEUED',approved_by=$1 WHERE id=$2 RETURNING *",[request.principal.id,id]);
+      else{const error=new Error("Legacy nonconforming pallet jobs cannot be approved");error.statusCode=409;error.code="NONCONFORMING_IDENTIFIER";throw error;}
       await tenantAudit(client,request,"CODE_JOB_APPROVE","CODE_GENERATION_JOB",id,found.rows[0],changed.rows[0]); return {value:changed.rows[0]};
     }); return reply.code(response.status).send(response.body);
   });

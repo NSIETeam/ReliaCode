@@ -18,3 +18,19 @@ test("code worker resumes an existing batch, pads GTIN for Digital Link, and com
   assert.equal(inserts[0][4],"00000012345670");
   assert.equal(updates[0][1],5);
 });
+
+test("pallet worker emits SSCC AI (00) from the immutable allocation snapshot without requiring a GTIN",async()=>{
+  let insert;const job={id:"job-sscc",tenant_id:"tenant-1",product_id:"product-1",code_batch_id:"batch-1",requested_by:"user-1",level:"PALLET",identifier_scheme:"SSCC",quantity:2,serial_rule:"SEQUENTIAL",lot:"LOT-1",generated_count:0,gtin:null,gs1_company_prefix_snapshot:"0614141",sscc_extension_digit:0,sscc_start_reference:"12345"};
+  const db=database(async(sql,params=[])=>{if(sql.includes("SELECT j.*"))return{rowCount:1,rows:[job]};if(sql.includes("INSERT INTO serialized_objects")){insert={sql,params};return{rowCount:2,rows:[{id:"one"},{id:"two"}]};}if(sql.includes("UPDATE code_generation_jobs SET generated_count"))return{rowCount:1,rows:[]};throw new Error(`Unexpected SQL: ${sql}`);});
+  assert.equal(await processCodeJobChunk(db,{GS1_DIGITAL_LINK_BASE_URL:"https://id.reliacode.cn"}),true);
+  assert.match(insert.sql,/\/00\/.*gs1_sscc/);
+  assert.deepEqual(insert.params.slice(4,8),["0614141",0,"12345",0]);
+});
+
+test("legacy pallet jobs fail closed and release their unused quota",async()=>{
+  const calls=[],job={id:"legacy",tenant_id:"tenant-1",quantity:10,generated_count:0,identifier_scheme:"LEGACY_NONCONFORMING",gtin:"06912345678902"};
+  const db=database(async(sql,params=[])=>{calls.push({sql,params});if(sql.includes("SELECT j.*"))return{rowCount:1,rows:[job]};return{rowCount:1,rows:[]};});
+  assert.equal(await processCodeJobChunk(db,{GS1_DIGITAL_LINK_BASE_URL:"https://id.reliacode.cn"}),true);
+  assert.match(calls.find(call=>call.sql.includes("status='FAILED'")).params[1],/nonconforming/);
+  assert.equal(calls.some(call=>call.sql.includes("INSERT INTO serialized_objects")),false);
+});

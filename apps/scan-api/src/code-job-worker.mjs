@@ -11,8 +11,9 @@ export async function processCodeJobChunk(db,config) {
     );
     if(!selected.rowCount)return false;
     const job=selected.rows[0];
-    if(!isValidGtin(job.gtin)){
-      await client.query("UPDATE code_generation_jobs SET status='FAILED',last_error='Product requires a valid GS1 GTIN before production code generation',completed_at=now() WHERE id=$1",[job.id]);
+    const failure=job.identifier_scheme==="LEGACY_NONCONFORMING"?"Legacy nonconforming pallet jobs cannot generate production identifiers":job.identifier_scheme==="SSCC"&&(!job.gs1_company_prefix_snapshot||job.sscc_start_reference===null||job.sscc_start_reference===undefined)?"SSCC allocation snapshot is missing":job.identifier_scheme!=="SSCC"&&!isValidGtin(job.gtin)?"Product requires a valid GS1 GTIN before production code generation":null;
+    if(failure){
+      await client.query("UPDATE code_generation_jobs SET status='FAILED',last_error=$2,completed_at=now() WHERE id=$1",[job.id,failure]);
       const release=Math.max(0,Number(job.quantity)-Number(job.generated_count));
       if(release)await client.query("UPDATE tenant_usage_monthly SET code_count=GREATEST(0,code_count-$1),updated_at=now() WHERE tenant_id=$2 AND usage_month=date_trunc('month',now())::date",[release,job.tenant_id]);
       return true;
@@ -30,7 +31,12 @@ export async function processCodeJobChunk(db,config) {
     const remaining=job.quantity-job.generated_count;
     const count=Math.min(remaining,10_000);
     const base=config.GS1_DIGITAL_LINK_BASE_URL.replace(/\/$/,"");
-    const inserted=await client.query(
+    const inserted=job.identifier_scheme==="SSCC"?await client.query(
+      `INSERT INTO serialized_objects(tenant_id,product_id,code_batch_id,code,level,lot,status)
+       SELECT $1,$2,$3,$4||'/00/'||gs1_sscc($5,$6,$7::bigint+$8+g-1),$9,$10,'COMMISSIONED' FROM generate_series(1,$11) g
+       ON CONFLICT (tenant_id,code) DO NOTHING RETURNING id`,
+      [job.tenant_id,job.product_id,batchId,base,job.gs1_company_prefix_snapshot,job.sscc_extension_digit,job.sscc_start_reference,job.generated_count,job.level,job.lot,count]
+    ):await client.query(
       `INSERT INTO serialized_objects(tenant_id,product_id,code_batch_id,code,level,lot,status)
        SELECT $1,$2,$3,$4||'/01/'||$5||'/21/'||
          CASE WHEN $6='SEQUENTIAL' THEN lpad(($7+g)::text,12,'0')

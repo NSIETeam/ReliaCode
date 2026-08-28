@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { gs1DigitalLink,gtinForDigitalLink,isValidGln,isValidGs1Mod10,isValidGtin } from "../src/gs1.mjs";
+import { buildSscc,gs1DigitalLink,gtinForDigitalLink,isValidGln,isValidGs1Mod10,isValidGtin,isValidSscc,ssccCapacity } from "../src/gs1.mjs";
 
 test("GS1 Mod-10 validates supported GTIN and GLN keys",()=>{
   assert.equal(isValidGtin("12345670"),true);
@@ -22,4 +22,12 @@ test("new Digital Link values use numeric AIs and canonical 14-digit GTIN",()=>{
   assert.equal(gtinForDigitalLink("12345670"),"00000012345670");
   assert.equal(gs1DigitalLink("https://id.gs1.org/","414","6901234567892"),"https://id.gs1.org/414/6901234567892");
   assert.throws(()=>gtinForDigitalLink("12345671"),/valid GTIN/);
+});
+
+test("SSCC allocation produces an 18-digit AI (00) key with a valid check digit",()=>{
+  const sscc=buildSscc("0614141",0,12345n);
+  assert.equal(sscc,"006141410000123452");
+  assert.equal(isValidSscc(sscc),true);
+  assert.equal(ssccCapacity("0614141"),1_000_000_000n);
+  assert.throws(()=>buildSscc("0614141",0,1_000_000_000n),/Invalid SSCC/);
 });

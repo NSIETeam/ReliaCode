@@ -32,6 +32,29 @@ test("product and location writes reject invalid GS1 check digits before databas
   assert.equal(mutations.length,0);
 });
 
+test("random pallet jobs are rejected because SSCC references use governed sequential allocation",async(t)=>{
+  const mutations=[],db={query:async sql=>{if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};mutations.push(sql);throw new Error(`Unexpected SQL: ${sql}`);}};
+  const app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject({method:"POST",url:"/api/v1/code-jobs",headers:{...headers,"idempotency-key":"pallet-random-test-001"},payload:{productId:"33333333-3333-4333-8333-333333333333",level:"PALLET",quantity:10,serialRule:"RANDOM",auditReason:"reject ungoverned pallet identifiers"}});
+  assert.equal(response.statusCode,400);assert.equal(mutations.length,0);
+});
+
+test("pallet approval atomically reserves an immutable SSCC range",async(t)=>{
+  const owner={...principal,role:"TENANT_OWNER"},jobId="33333333-3333-4333-8333-333333333333",calls=[];
+  const client={query:async(sql,params=[])=>{calls.push({sql,params});if(sql.includes("FROM idempotency_records"))return{rowCount:0,rows:[]};if(sql.startsWith("SELECT * FROM code_generation_jobs"))return{rowCount:1,rows:[{id:jobId,status:"PENDING_APPROVAL",identifier_scheme:"SSCC",quantity:25}]};if(sql.startsWith("SELECT gs1_company_prefix"))return{rowCount:1,rows:[{gs1_company_prefix:"0614141",sscc_next_reference:"100"}]};if(sql.startsWith("UPDATE code_generation_jobs SET status='QUEUED'"))return{rowCount:1,rows:[{id:jobId,status:"QUEUED",identifier_scheme:"SSCC",gs1_company_prefix_snapshot:"0614141",sscc_start_reference:"100"}]};return{rowCount:1,rows:[]};}};
+  const db={query:async sql=>sql.includes("SELECT EXISTS")?{rowCount:1,rows:[{active:true}]}:{rowCount:0,rows:[]},transaction:async work=>work(client)},app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject({method:"POST",url:`/api/v1/code-jobs/${jobId}/approve`,headers:{"x-reliacode-principal":JSON.stringify(owner),"idempotency-key":"approve-sscc-test-001"},payload:{auditReason:"approve governed pallet range"}});
+  assert.equal(response.statusCode,200);
+  assert.deepEqual(calls.find(call=>call.sql.startsWith("UPDATE tenant_settings SET sscc_next_reference")).params,["125",principal.tenant_id]);
+  assert.deepEqual(calls.find(call=>call.sql.startsWith("UPDATE code_generation_jobs SET status='QUEUED'")).params,[principal.sub,"0614141","100",jobId]);
+});
+
+test("only tenant owners can configure a GS1 Company Prefix",async(t)=>{
+  const db={query:async sql=>sql.includes("SELECT EXISTS")?{rowCount:1,rows:[{active:true}]}:{rowCount:0,rows:[]}},app=await buildApp({config,db});t.after(()=>app.close());
+  const response=await app.inject({method:"POST",url:"/api/v1/tenant/gs1-settings",headers:{...headers,"idempotency-key":"gs1-settings-forbidden-001"},payload:{gs1CompanyPrefix:"0614141",auditReason:"attempt prefix configuration"}});
+  assert.equal(response.statusCode,403);
+});
+
 test("code job listing is tenant-scoped, paginated, and never selects object keys",async(t)=>{const calls=[],db={query:async(sql,params=[])=>{calls.push({sql,params});if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};if(sql.includes("FROM code_generation_jobs WHERE tenant_id=$1"))return{rowCount:1,rows:[{id:"33333333-3333-4333-8333-333333333333",created_at:"2026-08-28T00:00:00Z",export_status:"COMPLETED"}]};throw new Error(`Unexpected SQL: ${sql}`);}};const app=await buildApp({config,db});t.after(()=>app.close());const response=await app.inject({method:"GET",url:"/api/v1/code-jobs?limit=20",headers});assert.equal(response.statusCode,200);assert.equal(response.json().items[0].output_object_key,undefined);const query=calls.find(call=>call.sql.includes("FROM code_generation_jobs WHERE tenant_id=$1"));assert.doesNotMatch(query.sql,/output_object_key/);assert.equal(query.params[0],principal.tenant_id);assert.equal(query.params[3],21);});
 
 test("code export download signs only a tenant-owned completed object",async(t)=>{const storageConfig=loadConfig({NODE_ENV:"test",DATABASE_URL:"postgres://unused",AUTH_MODE:"development",LOG_LEVEL:"silent",OBJECT_STORAGE_ENDPOINT:"https://s3.example.cn",OBJECT_STORAGE_REGION:"cn-test-1",OBJECT_STORAGE_BUCKET:"exports",OBJECT_STORAGE_ACCESS_KEY_ID:"access",OBJECT_STORAGE_SECRET_ACCESS_KEY:"secret"}),id="33333333-3333-4333-8333-333333333333";const db={query:async(sql,params=[])=>{if(sql.includes("SELECT EXISTS"))return{rowCount:1,rows:[{active:true}]};if(sql.includes("SELECT output_object_key")){assert.deepEqual(params,[principal.tenant_id,id]);return{rowCount:1,rows:[{output_object_key:`tenants/${principal.tenant_id}/code-jobs/${id}/codes.csv`,export_status:"COMPLETED"}]};}throw new Error(`Unexpected SQL: ${sql}`);}};const app=await buildApp({config:storageConfig,db});t.after(()=>app.close());const response=await app.inject({method:"GET",url:`/api/v1/code-jobs/${id}/download`,headers});assert.equal(response.statusCode,200);assert.match(response.json().url,/X-Amz-Signature=/);assert.match(response.json().url,/codes\.csv/);});
