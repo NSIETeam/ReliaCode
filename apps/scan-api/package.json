@@ -11,11 +11,15 @@
     "start": "node src/server.mjs",
     "worker": "node src/outbox-worker.mjs",
     "worker:codes": "node src/code-job-worker.mjs",
+    "worker:code-exports": "node src/code-export-worker.mjs",
     "worker:webhooks": "node src/webhook-worker.mjs",
     "migrate": "node src/migrate.mjs",
     "test": "node --test tests/*.test.mjs"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1120.0",
+    "@aws-sdk/lib-storage": "^3.1120.0",
+    "@aws-sdk/s3-request-presigner": "^3.1120.0",
     "@fastify/cors": "^11.1.0",
     "@fastify/helmet": "^13.0.2",
     "@fastify/rate-limit": "^10.3.0",

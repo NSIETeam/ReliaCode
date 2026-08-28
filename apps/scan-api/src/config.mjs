@@ -40,6 +40,14 @@ const schema = z.object({
   WEBAUTHN_ORIGIN: z.string().url().optional(),
   METRICS_BEARER_TOKEN: z.string().min(32).optional(),
   WEBHOOK_ENCRYPTION_KEY: z.string().min(43).optional(),
+  OBJECT_STORAGE_ENDPOINT: z.string().url().optional(),
+  OBJECT_STORAGE_REGION: z.string().min(1).default("auto"),
+  OBJECT_STORAGE_BUCKET: z.string().min(3).max(63).optional(),
+  OBJECT_STORAGE_ACCESS_KEY_ID: z.string().min(1).optional(),
+  OBJECT_STORAGE_ACCESS_KEY_ID_FILE: z.string().min(1).optional(),
+  OBJECT_STORAGE_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+  OBJECT_STORAGE_SECRET_ACCESS_KEY_FILE: z.string().min(1).optional(),
+  OBJECT_STORAGE_FORCE_PATH_STYLE: boolean.default(false),
   APP_VERSION: z.string().min(1).max(100).default("development"),
   GIT_SHA: z.string().min(1).max(100).default("unknown")
 });
@@ -69,11 +77,18 @@ export function loadConfig(env = process.env) {
   if (config.AUTH_MODE === "oidc" && !config.OIDC_ISSUER_URL) {
     throw new Error("OIDC_ISSUER_URL is required when AUTH_MODE=oidc");
   }
+  const objectStorageAccessKeyId=config.OBJECT_STORAGE_ACCESS_KEY_ID||(config.OBJECT_STORAGE_ACCESS_KEY_ID_FILE?readFileSync(config.OBJECT_STORAGE_ACCESS_KEY_ID_FILE,"utf8").trim():"");
+  const objectStorageSecretAccessKey=config.OBJECT_STORAGE_SECRET_ACCESS_KEY||(config.OBJECT_STORAGE_SECRET_ACCESS_KEY_FILE?readFileSync(config.OBJECT_STORAGE_SECRET_ACCESS_KEY_FILE,"utf8").trim():"");
+  const objectStorageValues=[config.OBJECT_STORAGE_ENDPOINT,config.OBJECT_STORAGE_BUCKET,objectStorageAccessKeyId,objectStorageSecretAccessKey];
+  if(objectStorageValues.some(Boolean)&&!objectStorageValues.every(Boolean))throw new Error("Object storage endpoint, bucket, access key, and secret key must be configured together");
   return {
     ...config,
     ALLOW_PUBLIC_REGISTRATION: config.ALLOW_PUBLIC_REGISTRATION ?? config.NODE_ENV !== "production",
     ENABLE_LEGACY_SYNC_CODE_GENERATION: config.ENABLE_LEGACY_SYNC_CODE_GENERATION ?? config.NODE_ENV !== "production",
     DATABASE_URL: databaseUrl,
+    OBJECT_STORAGE_ACCESS_KEY_ID:objectStorageAccessKeyId||undefined,
+    OBJECT_STORAGE_SECRET_ACCESS_KEY:objectStorageSecretAccessKey||undefined,
+    objectStorageConfigured:objectStorageValues.every(Boolean),
     corsOrigins: [...new Set((config.CORS_ORIGINS + "," + (config.PUBLIC_ORIGINS || "")).split(",").map((value) => value.trim()).filter(Boolean))]
   };
 }

@@ -37,3 +37,5 @@ test("webhook encryption key must decode to exactly 32 bytes", () => {
   const config=loadConfig({ DATABASE_URL:"postgres://db", AUTH_MODE:"development", WEBHOOK_ENCRYPTION_KEY:Buffer.alloc(32,7).toString("base64url") });
   assert.equal(Buffer.from(config.WEBHOOK_ENCRYPTION_KEY,"base64url").length,32);
 });
+
+test("object storage configuration is all-or-nothing",()=>{assert.throws(()=>loadConfig({DATABASE_URL:"postgres://db",AUTH_MODE:"development",OBJECT_STORAGE_ENDPOINT:"https://s3.example.cn"}),/configured together/);const config=loadConfig({DATABASE_URL:"postgres://db",AUTH_MODE:"development",OBJECT_STORAGE_ENDPOINT:"https://s3.example.cn",OBJECT_STORAGE_BUCKET:"exports",OBJECT_STORAGE_ACCESS_KEY_ID:"access",OBJECT_STORAGE_SECRET_ACCESS_KEY:"secret"});assert.equal(config.objectStorageConfigured,true);});

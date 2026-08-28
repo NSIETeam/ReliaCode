@@ -23,7 +23,13 @@ services:
       WEBAUTHN_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
       METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN:?METRICS_BEARER_TOKEN is required}
       WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:?WEBHOOK_ENCRYPTION_KEY is required}
-    secrets: [database_url]
+      OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:?OBJECT_STORAGE_ENDPOINT is required}
+      OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-auto}
+      OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:?OBJECT_STORAGE_BUCKET is required}
+      OBJECT_STORAGE_ACCESS_KEY_ID_FILE: /run/secrets/object_storage_access_key_id
+      OBJECT_STORAGE_SECRET_ACCESS_KEY_FILE: /run/secrets/object_storage_secret_access_key
+      OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-false}
+    secrets: &api_secrets [database_url, object_storage_access_key_id, object_storage_secret_access_key]
     restart: "no"
 
   api:
@@ -31,7 +37,7 @@ services:
     environment:
       <<: *api_environment
       DB_POOL_MAX: ${DB_POOL_MAX:-8}
-    secrets: [database_url]
+    secrets: *api_secrets
     ports: ["4180:4180"]
     depends_on:
       migrate: { condition: service_completed_successfully }
@@ -49,7 +55,7 @@ services:
     environment:
       <<: *api_environment
       DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}
-    secrets: [database_url]
+    secrets: *api_secrets
     depends_on:
       migrate: { condition: service_completed_successfully }
     restart: unless-stopped
@@ -60,7 +66,7 @@ services:
     environment:
       <<: *api_environment
       DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}
-    secrets: [database_url]
+    secrets: *api_secrets
     depends_on:
       migrate: { condition: service_completed_successfully }
     restart: unless-stopped
@@ -71,7 +77,18 @@ services:
     environment:
       <<: *api_environment
       DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}
-    secrets: [database_url]
+    secrets: *api_secrets
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  code-export-worker:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    command: ["src/code-export-worker.mjs"]
+    environment:
+      <<: *api_environment
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}
+    secrets: *api_secrets
     depends_on:
       migrate: { condition: service_completed_successfully }
     restart: unless-stopped
@@ -95,3 +112,7 @@ services:
 secrets:
   database_url:
     file: ./secrets/database_url.txt
+  object_storage_access_key_id:
+    file: ./secrets/object_storage_access_key_id.txt
+  object_storage_secret_access_key:
+    file: ./secrets/object_storage_secret_access_key.txt

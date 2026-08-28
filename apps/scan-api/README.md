@@ -15,3 +15,5 @@ npm start
 开发身份通过 `X-ReliaCode-Principal` JSON 请求头提供；`NODE_ENV=production` 时服务会拒绝 development 身份模式，必须配置 OIDC。
 
 公开产品验证端点为 `GET /api/public/v1/objects/:publicId`。该端点无需身份令牌，使用不可枚举 UUID、IP 速率限制和最小化响应；不会返回租户、组织、人员、设备、单据、奖励或内部对象 ID。生产环境应只允许受控的公开验证前端 Origin，并在 CDN/WAF 层增加滥用防护。
+
+生产生码使用 `POST /api/v1/code-jobs`，审批后由 `worker:codes` 分块生成。完成后 `worker:code-exports` 以固定内存分页生成 UTF-8 CSV、分片上传到 S3 兼容对象存储并保存 SHA-256；`GET /api/v1/code-jobs/:id/download` 只为当前租户签发 5 分钟下载地址，不通过 API 进程传输文件。对象存储凭据必须通过文件型 secret 注入，导出失败十次后进入死信并由有审批权限的管理员审计重试。

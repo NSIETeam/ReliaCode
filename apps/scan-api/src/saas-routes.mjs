@@ -3,6 +3,7 @@ import { z } from "zod";
 import { requireCapability, hashPassword, hashToken } from "./auth.mjs";
 import { getIdempotentResponse, lockIdempotencyKey, requestHash, saveIdempotentResponse } from "./idempotency.mjs";
 import { parseIdempotencyKey } from "./schemas.mjs";
+import { createObjectStorage,presignCodeExport } from "./object-storage.mjs";
 
 const email = z.string().trim().email().max(254).transform((value) => value.toLowerCase());
 const reason = z.string().trim().min(3).max(500);
@@ -46,7 +47,7 @@ async function command(db, request, operation, input, work) {
 }
 async function platformCommand(db,request,operation,input,work){const key=parseIdempotencyKey(request),hash=requestHash(operation,input);return tx(db,async(client)=>{await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",["platform:"+key]);const existing=await client.query("SELECT request_hash,response_status,response_body FROM platform_idempotency_records WHERE idempotency_key=$1 AND expires_at>now()",[key]);if(existing.rowCount){if(existing.rows[0].request_hash!==hash){const e=new Error("Idempotency key was already used with a different request");e.statusCode=409;e.code="IDEMPOTENCY_CONFLICT";throw e;}return{status:existing.rows[0].response_status,body:existing.rows[0].response_body};}const result=await work(client);await client.query(`INSERT INTO platform_idempotency_records(idempotency_key,operation,request_hash,response_status,response_body,expires_at) VALUES($1,$2,$3,$4,$5,now()+interval '24 hours')`,[key,operation,hash,result.status||200,result.value]);return{status:result.status||200,body:result.value};});}
 
-export function registerSaasRoutes(app, { db }) {
+export function registerSaasRoutes(app, { db,config }) {
   app.post("/api/v1/tenant-applications", { config:{ rateLimit:{ max:10, timeWindow:"1 hour" } } }, async (request, reply) => {
     const body = z.object({
       companyName:z.string().trim().min(2).max(160), contactName:z.string().trim().min(2).max(100),
@@ -172,7 +173,10 @@ export function registerSaasRoutes(app, { db }) {
   });
 
   app.get("/api/v1/code-jobs",async(request)=>{
-    requireCapability(request.principal,"codes:write"); const result=await db.query("SELECT * FROM code_generation_jobs WHERE tenant_id=$1 ORDER BY created_at DESC LIMIT 200",[request.principal.tenantId]); return {items:result.rows};
+    requireCapability(request.principal,"codes:write");const query=pageQuery.parse(request.query),cursor=cursorDecode(query.cursor);const result=await db.query(`SELECT id,product_id,code_batch_id,requested_by,approved_by,level,quantity,serial_rule,lot,status,generated_count,last_error,
+      export_status,export_attempts,export_last_error,export_completed_at,output_size_bytes,output_sha256,created_at,started_at,completed_at
+      FROM code_generation_jobs WHERE tenant_id=$1 AND ($2::timestamptz IS NULL OR (created_at,id)<($2,$3::uuid))
+      ORDER BY created_at DESC,id DESC LIMIT $4`,[request.principal.tenantId,cursor?.[0]||null,cursor?.[1]||null,query.limit+1]);return page(result.rows,query.limit);
   });
   app.post("/api/v1/code-jobs",async(request,reply)=>{
     requireCapability(request.principal,"codes:write");
@@ -206,6 +210,8 @@ export function registerSaasRoutes(app, { db }) {
     requireCapability(request.principal,"codes:approve");const id=uuid.parse(request.params.id),body=z.object({auditReason:reason}).parse(request.body);
     const response=await command(db,request,"CODE_JOB_RETRY",{id,...body},async(client)=>{const found=await client.query("SELECT * FROM code_generation_jobs WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[request.principal.tenantId,id]);if(!found.rowCount)notFound();if(found.rows[0].status!=="FAILED"){const e=new Error("Only failed jobs can be retried");e.statusCode=409;e.code="INVALID_STATE";throw e;}const reserve=Math.max(0,Number(found.rows[0].quantity)-Number(found.rows[0].generated_count));await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",["code-quota:"+request.principal.tenantId]);const quota=await client.query(`SELECT COALESCE(s.max_monthly_codes,10000)::bigint max_codes,COALESCE(u.code_count,0)::bigint used_codes FROM tenants t LEFT JOIN tenant_settings s ON s.tenant_id=t.id LEFT JOIN tenant_usage_monthly u ON u.tenant_id=t.id AND u.usage_month=date_trunc('month',now())::date WHERE t.id=$1`,[request.principal.tenantId]);if(BigInt(quota.rows[0]?.used_codes||0)+BigInt(reserve)>BigInt(quota.rows[0]?.max_codes||0))return{status:429,value:{code:"MONTHLY_CODE_LIMIT",message:"Monthly code quota would be exceeded"}};if(reserve)await client.query(`INSERT INTO tenant_usage_monthly(tenant_id,usage_month,code_count) VALUES($1,date_trunc('month',now())::date,$2) ON CONFLICT(tenant_id,usage_month) DO UPDATE SET code_count=tenant_usage_monthly.code_count+EXCLUDED.code_count,updated_at=now()`,[request.principal.tenantId,reserve]);const changed=await client.query("UPDATE code_generation_jobs SET status='QUEUED',last_error=NULL,completed_at=NULL,approved_by=$1 WHERE id=$2 RETURNING *",[request.principal.id,id]);await tenantAudit(client,request,"CODE_JOB_RETRY","CODE_GENERATION_JOB",id,found.rows[0],changed.rows[0]);return{value:changed.rows[0]};});return reply.code(response.status).send(response.body);
   });
+  app.post("/api/v1/code-jobs/:id/export-retry",async(request,reply)=>{requireCapability(request.principal,"codes:approve");const id=uuid.parse(request.params.id),body=z.object({auditReason:reason}).parse(request.body);const response=await command(db,request,"CODE_EXPORT_RETRY",{id,...body},async client=>{const found=await client.query("SELECT * FROM code_generation_jobs WHERE tenant_id=$1 AND id=$2 FOR UPDATE",[request.principal.tenantId,id]);if(!found.rowCount)notFound();if(found.rows[0].status!=="COMPLETED"||found.rows[0].export_status!=="DEAD_LETTER"){const error=new Error("Only dead-lettered exports can be retried");error.statusCode=409;error.code="INVALID_STATE";throw error;}const changed=await client.query("UPDATE code_generation_jobs SET export_status='PENDING',export_attempts=0,export_last_error=NULL,export_available_at=now(),export_locked_at=NULL WHERE tenant_id=$1 AND id=$2 RETURNING id,status,export_status,export_attempts",[request.principal.tenantId,id]);await tenantAudit(client,request,"CODE_EXPORT_RETRY","CODE_GENERATION_JOB",id,found.rows[0],changed.rows[0]);return{value:changed.rows[0]};});return reply.code(response.status).send(response.body);});
+  app.get("/api/v1/code-jobs/:id/download",{config:{rateLimit:{max:30,timeWindow:"1 minute"}}},async(request)=>{requireCapability(request.principal,"codes:write");const id=uuid.parse(request.params.id),result=await db.query("SELECT output_object_key,export_status FROM code_generation_jobs WHERE tenant_id=$1 AND id=$2",[request.principal.tenantId,id]);if(!result.rowCount)notFound();if(result.rows[0].export_status!=="COMPLETED"||!result.rows[0].output_object_key){const error=new Error("Code export is not ready");error.statusCode=409;error.code="EXPORT_NOT_READY";throw error;}const storage=createObjectStorage(config);try{const url=await presignCodeExport(storage,config,result.rows[0].output_object_key,{expiresIn:300});return{url,expiresAt:new Date(Date.now()+300000).toISOString()};}finally{storage.destroy();}});
 
   app.get("/api/v1/recalls",async(request)=>{requireCapability(request.principal,"events:read");const result=await db.query("SELECT * FROM recalls WHERE tenant_id=$1 ORDER BY created_at DESC",[request.principal.tenantId]);return {items:result.rows};});
   app.post("/api/v1/recalls",async(request,reply)=>{

@@ -41,7 +41,9 @@ export async function processCodeJobChunk(db,config) {
     const generated=job.generated_count+inserted.rowCount;
     await client.query(
       `UPDATE code_generation_jobs SET generated_count=$2,status=CASE WHEN $2>=quantity THEN 'COMPLETED' ELSE 'RUNNING' END,
-       completed_at=CASE WHEN $2>=quantity THEN now() ELSE NULL END,last_error=NULL WHERE id=$1`,[job.id,generated]
+       completed_at=CASE WHEN $2>=quantity THEN now() ELSE NULL END,
+       export_status=CASE WHEN $2>=quantity THEN 'PENDING' ELSE export_status END,
+       export_available_at=CASE WHEN $2>=quantity THEN now() ELSE export_available_at END,last_error=NULL WHERE id=$1`,[job.id,generated]
     );
     return true;
   });
