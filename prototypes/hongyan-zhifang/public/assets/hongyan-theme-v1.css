@@ -100,13 +100,13 @@ button, a { -webkit-tap-highlight-color: transparent; }
   backdrop-filter: blur(14px);
 }
 .login-hero .brand > span:first-child {
-  width: 38px;
-  height: 38px;
-  background-color: #fff;
-  border-color: rgba(169,65,53,.18);
+  width: 42px;
+  height: 42px;
 }
-.login-hero .brand div::before { color: #6b8a80; }
-.login-hero .brand div::after { color: var(--hy-ink-strong); }
+.brand > div { display: grid; gap: 1px; color: var(--hy-ink-strong); font-size: 18px; font-weight: 760; line-height: 1.08; }
+.login-hero .brand > div { font-size: 18px; }
+.brand > div::before, .brand > div::after { content: none !important; display: none !important; }
+.brand .company-name { color: #6b8a80 !important; font-size: 10px !important; font-weight: 700; letter-spacing: .08em; text-transform: none; }
 .login-hero > div > p {
   width: fit-content;
   max-width: 680px;
@@ -251,13 +251,34 @@ button, a { -webkit-tap-highlight-color: transparent; }
 }
 .shell > aside .brand { min-height: 54px; padding: 4px 8px 22px; color: var(--hy-ink-strong); }
 .brand > span:first-child {
+  flex: 0 0 auto;
+  width: 44px;
+  height: 44px;
+  color: transparent !important;
+  border: 1px solid rgba(20,123,94,.18);
+  border-radius: 12px;
+  background: rgba(255,255,255,.94) url('/assets/hongyan-brand-mark.png') center / 38px auto no-repeat !important;
+  box-shadow: 0 7px 18px rgba(51,87,74,.08);
+  font-size: 0;
+}
+.employee-brand > span:first-child,
+.brand-symbol {
+  flex: 0 0 auto;
   width: 40px;
   height: 40px;
-  background-color: #fff;
-  border: 1px solid rgba(169,65,53,.18);
+  color: transparent !important;
+  border: 1px solid rgba(20,123,94,.18);
+  border-radius: 11px;
+  background: rgba(255,255,255,.94) url('/assets/hongyan-brand-mark.png') center / 35px auto no-repeat !important;
   box-shadow: 0 7px 18px rgba(51,87,74,.08);
+  font-size: 0;
 }
-.brand .company-name { color: #8a9b95; }
+.employee-brand > div,
+.platform-mark > span:last-child { display: grid; gap: 1px; line-height: 1.08; }
+.employee-brand strong,
+.platform-mark > span:last-child { color: var(--hy-ink-strong); font-size: 15px; font-weight: 760; }
+.employee-brand small,
+.platform-mark > span:last-child small { color: #6b8a80; font-size: 9px; font-weight: 700; letter-spacing: .08em; }
 .shell nav { gap: 2px; }
 .shell nav a, .logout {
   min-height: 43px;
