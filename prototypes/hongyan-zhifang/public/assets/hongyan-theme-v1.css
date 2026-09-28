@@ -12,11 +12,12 @@
   --hy-brand: #147b5e;
   --hy-brand-strong: #0c5f49;
   --hy-brand-soft: #dff4ec;
+  --hy-logo: #084B37;
   --hy-line: rgba(67, 132, 108, .2);
   --hy-line-strong: rgba(37, 117, 87, .34);
   --hy-warn: #da7a22;
   --hy-danger: #d64c42;
-  --hy-goose: #a94135;
+  --hy-goose: var(--hy-logo);
   --hy-shadow-sm: 0 8px 24px rgba(19, 78, 59, .07);
   --hy-shadow-md: 0 20px 54px rgba(14, 70, 54, .1);
   --hy-radius-sm: 9px;
@@ -29,7 +30,7 @@
   --company-ink: var(--hy-ink);
   --company-muted: var(--hy-muted);
   --company-line: var(--hy-line);
-  --product-hongyan: var(--hy-brand);
+  --product-hongyan: var(--hy-logo);
   --radius-sm: var(--hy-radius-sm);
   --radius-md: var(--hy-radius-md);
   --radius-lg: var(--hy-radius-lg);
@@ -257,7 +258,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   color: transparent !important;
   border: 1px solid rgba(20,123,94,.18);
   border-radius: 12px;
-  background: rgba(255,255,255,.94) url('/assets/hongyan-brand-mark.png') center / 38px auto no-repeat !important;
+  background: rgba(255,255,255,.94) url('/assets/hongyan-brand-mark.svg') center / 38px auto no-repeat !important;
   box-shadow: 0 7px 18px rgba(51,87,74,.08);
   font-size: 0;
 }
@@ -269,7 +270,7 @@ button, a { -webkit-tap-highlight-color: transparent; }
   color: transparent !important;
   border: 1px solid rgba(20,123,94,.18);
   border-radius: 11px;
-  background: rgba(255,255,255,.94) url('/assets/hongyan-brand-mark.png') center / 35px auto no-repeat !important;
+  background: rgba(255,255,255,.94) url('/assets/hongyan-brand-mark.svg') center / 35px auto no-repeat !important;
   box-shadow: 0 7px 18px rgba(51,87,74,.08);
   font-size: 0;
 }

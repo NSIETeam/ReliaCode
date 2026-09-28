@@ -14,4 +14,5 @@ npm run dev
 
 - `public/assets/app.js` 与 `public/assets/base.css` 是当前线上公开构建的只读基线。
 - `public/assets/hongyan-theme-v1.css` 是第一轮整站统一主题，可迁移回原始 Vue 源码。
+- `public/assets/hongyan-brand-mark.svg` 是鸿雁知访唯一标准 Logo，采用透明底矢量轮廓和固定色值 `#084B37`；PNG 仅作为旧入口兼容资源。
 - 未取得原始源码前，不直接覆盖生产构建文件，也不把压缩产物冒充可维护源码。
