@@ -1,0 +1,16 @@
+.env
+.env.*
+!.env.example
+!deploy/.env.production.example
+node_modules/
+dist/
+build/
+coverage/
+.idea/
+.vscode/
+*.log
+*.local
+secrets/
+deploy/.env
+deploy/secrets/
+data/

@@ -1,0 +1,1 @@
+authorization=Bearer%20test-only-otel-token

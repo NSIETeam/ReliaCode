@@ -1,0 +1,22 @@
+name: openepcis-live-contract
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contract:
+    runs-on: ubuntu-latest
+    environment: integration
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - name: Capture and query one unique EPCIS event
+        env:
+          OPEN_EPCIS_CONTRACT_BASE_URL: ${{ secrets.OPEN_EPCIS_CONTRACT_BASE_URL }}
+          OPEN_EPCIS_CONTRACT_BEARER_TOKEN: ${{ secrets.OPEN_EPCIS_CONTRACT_BEARER_TOKEN }}
+        run: node apps/scan-api/tests/openepcis-live-contract.mjs

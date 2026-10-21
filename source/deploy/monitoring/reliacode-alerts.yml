@@ -1,0 +1,73 @@
+groups:
+  - name: reliacode-production
+    rules:
+      - alert: ReliaCodeHttpP95High
+        expr: histogram_quantile(0.95, sum by (le) (rate(reliacode_http_request_duration_seconds_bucket[5m]))) > 0.5
+        for: 10m
+        labels: { severity: warning }
+        annotations:
+          summary: ReliaCode HTTP P95 exceeds 500 ms
+          runbook_url: docs/production-operations.md
+      - alert: ReliaCodeHttpErrorRateHigh
+        expr: sum(rate(reliacode_http_request_duration_seconds_count{status=~"5.."}[5m])) / clamp_min(sum(rate(reliacode_http_request_duration_seconds_count[5m])), 0.001) > 0.001
+        for: 10m
+        labels: { severity: critical }
+        annotations:
+          summary: ReliaCode HTTP 5xx rate exceeds 0.1 percent
+          runbook_url: docs/production-operations.md
+      - alert: ReliaCodeEpcisBacklogOld
+        expr: reliacode_epcis_oldest_pending_age_seconds > 300
+        for: 5m
+        labels: { severity: critical }
+        annotations:
+          summary: Oldest pending OpenEPCIS event exceeds five minutes
+          runbook_url: docs/production-operations.md
+      - alert: ReliaCodeEpcisDeadLetters
+        expr: reliacode_epcis_dead_letters > 0
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: OpenEPCIS dead letters require dual-control review
+          runbook_url: docs/production-operations.md
+      - alert: ReliaCodeDatabasePoolWaiting
+        expr: reliacode_database_pool_waiting > 0
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: Requests are waiting for a PostgreSQL connection
+          runbook_url: docs/production-operations.md
+      - alert: ReliaCodeBackupMissingOrStale
+        expr: reliacode_backup_age_seconds < 0 or reliacode_backup_age_seconds > 86400
+        for: 15m
+        labels: { severity: critical }
+        annotations:
+          summary: No verified offsite backup exists within the last 24 hours
+          runbook_url: docs/production-operations.md
+      - alert: ReliaCodeWebhookDeadLetters
+        expr: reliacode_webhook_dead_letters > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: Signed webhook deliveries are dead-lettered
+          runbook_url: docs/production-operations.md
+      - alert: ReliaCodeCodeExportDeadLetters
+        expr: reliacode_code_export_dead_letters > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: Code export jobs are dead-lettered
+          runbook_url: docs/production-operations.md
+      - alert: ReliaCodeRewardReconciliationBacklog
+        expr: reliacode_reward_reconciliation_backlog > 20
+        for: 15m
+        labels: { severity: warning }
+        annotations:
+          summary: Reward reconciliation export queue is not draining
+          runbook_url: docs/production-operations.md
+      - alert: ReliaCodeRewardReconciliationDeadLetters
+        expr: reliacode_reward_reconciliation_dead_letters > 0
+        for: 1m
+        labels: { severity: warning }
+        annotations:
+          summary: Reward reconciliation exports are dead-lettered
+          runbook_url: docs/production-operations.md

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>代理商管理 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'distributors' }) %>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-title">新增代理商</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px;">
+        <div class="form-group">
+          <label>代理商名称</label>
+          <input type="text" id="distName" class="form-control" placeholder="如：深圳总代">
+        </div>
+        <div class="form-group">
+          <label>联系电话</label>
+          <input type="text" id="distPhone" class="form-control" placeholder="手机号">
+        </div>
+        <div class="form-group">
+          <label>负责区域</label>
+          <input type="text" id="distRegion" class="form-control" placeholder="如：广东省深圳市">
+        </div>
+        <div class="form-group">
+          <label>地址</label>
+          <input type="text" id="distAddress" class="form-control" placeholder="详细地址">
+        </div>
+        <% if (brands && brands.length > 0) { %>
+        <div class="form-group">
+          <label>归属品牌</label>
+          <select id="distBrand" class="form-control">
+            <option value="">请选择品牌</option>
+            <% brands.forEach(b => { %><option value="<%= b.id %>"><%= b.name %></option><% }); %>
+          </select>
+        </div>
+        <% } %>
+      </div>
+      <button class="btn btn-primary" onclick="addDist()">添加代理商</button>
+    </div>
+
+    <div class="card">
+      <div class="card-title">代理商列表</div>
+      <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>名称</th><th class="col-sm-hide">电话</th><th>区域</th><th class="col-sm-hide">地址</th><% if (brands && brands.length > 0) { %><th class="col-sm-hide">归属品牌</th><% } %>
+            <th class="col-sm-hide">创建时间</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% distributors.forEach(d => { %>
+          <tr>
+            <td><%= d.name %></td>
+            <td class="col-sm-hide"><%= d.phone || '-' %></td>
+            <td><span class="tag tag-blue"><%= d.region || '未设置' %></span></td>
+            <td class="col-sm-hide"><%= d.address || '-' %></td>
+            <% if (brands && brands.length > 0) { %><td class="col-sm-hide"><%= d.brand_name || '-' %></td><% } %>
+            <td class="col-sm-hide" style="font-size:12px;color:#666;"><%= d.created_at %></td>
+            <td>
+              <button class="btn btn-outline btn-sm" onclick="editDist(<%= d.id %>, '<%= d.name %>','<%= d.phone %>','<%= d.region %>','<%= d.address %>')">编辑</button>
+              <button class="btn btn-danger btn-sm" onclick="delDist(<%= d.id %>)">删除</button>
+            </td>
+          </tr>
+          <% }); %>
+          <% if (distributors.length === 0) { %>
+          <tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">暂无代理商</td></tr>
+          <% } %>
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- 编辑弹窗 -->
+  <div id="editModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.4);z-index:100;align-items:center;justify-content:center;">
+    <div class="card" style="width:400px;max-width:90%;">
+      <div class="card-title">编辑代理商</div>
+      <input type="hidden" id="editId">
+      <div class="form-group"><label>名称</label><input type="text" id="editName" class="form-control"></div>
+      <div class="form-group"><label>电话</label><input type="text" id="editPhone" class="form-control"></div>
+      <div class="form-group"><label>区域</label><input type="text" id="editRegion" class="form-control"></div>
+      <div class="form-group"><label>地址</label><input type="text" id="editAddress" class="form-control"></div>
+      <div style="display:flex;gap:8px;">
+        <button class="btn btn-primary" onclick="saveDist()">保存</button>
+        <button class="btn btn-outline" onclick="closeModal()">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    async function addDist() {
+      const name = document.getElementById('distName').value.trim();
+      const phone = document.getElementById('distPhone').value.trim();
+      const region = document.getElementById('distRegion').value.trim();
+      const address = document.getElementById('distAddress').value.trim();
+      const brandSel = document.getElementById('distBrand');
+      const brand_id = brandSel ? brandSel.value : '';
+      if (!name) return toast('请输入代理商名称', 'error');
+      if (brandSel && !brand_id) return toast('请选择归属品牌', 'error');
+      const res = await fetch('/api/distributors', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({name, phone, region, address, brand_id})
+      });
+      const data = await res.json();
+      if (data.success) { toast('添加成功'); setTimeout(()=>location.reload(), 800); }
+      else toast(data.msg || '添加失败', 'error');
+    }
+
+    function editDist(id, name, phone, region, address) {
+      document.getElementById('editModal').style.display = 'flex';
+      document.getElementById('editId').value = id;
+      document.getElementById('editName').value = name;
+      document.getElementById('editPhone').value = phone;
+      document.getElementById('editRegion').value = region;
+      document.getElementById('editAddress').value = address;
+    }
+    function closeModal() { document.getElementById('editModal').style.display = 'none'; }
+
+    async function saveDist() {
+      const id = document.getElementById('editId').value;
+      const name = document.getElementById('editName').value.trim();
+      const phone = document.getElementById('editPhone').value.trim();
+      const region = document.getElementById('editRegion').value.trim();
+      const address = document.getElementById('editAddress').value.trim();
+      const res = await fetch(`/api/distributors/${id}`, {
+        method: 'PUT', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({name, phone, region, address})
+      });
+      const data = await res.json();
+      if (data.success) { toast('保存成功'); setTimeout(()=>location.reload(), 800); }
+    }
+
+    async function delDist(id) {
+      if (!confirm('确定删除该代理商？')) return;
+      const res = await fetch(`/api/distributors/${id}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) { toast('已删除'); setTimeout(()=>location.reload(), 800); }
+    }
+  </script>
+</body>
+</html>

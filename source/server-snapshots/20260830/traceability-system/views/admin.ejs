@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'home' }) %>
+
+  <div class="container">
+    <div class="stats-grid">
+      <a class="stat-card stat-link" href="/generate">
+        <div class="num"><%= stats.products %></div>
+        <div class="label">产品总数</div>
+        <div class="stat-arrow">›</div>
+      </a>
+      <a class="stat-card stat-link" href="/codes">
+        <div class="num"><%= stats.boxes %></div>
+        <div class="label">箱码总数</div>
+        <div class="stat-arrow">›</div>
+      </a>
+      <a class="stat-card stat-link" href="/codes?type=item">
+        <div class="num"><%= stats.items %></div>
+        <div class="label">子码总数</div>
+        <div class="stat-arrow">›</div>
+      </a>
+      <a class="stat-card stat-link" href="/codes?status=shipped">
+        <div class="num success"><%= stats.shipped %></div>
+        <div class="label">已发货箱数</div>
+        <div class="stat-arrow">›</div>
+      </a>
+      <a class="stat-card stat-link" href="/logs">
+        <div class="num success"><%= stats.scanned %></div>
+        <div class="label">已扫码数</div>
+        <div class="stat-arrow">›</div>
+      </a>
+      <a class="stat-card stat-link" href="/alerts">
+        <div class="num danger"><%= stats.diversions %></div>
+        <div class="label">串货预警</div>
+        <div class="stat-arrow">›</div>
+      </a>
+    </div>
+
+    <div style="display:flex;gap:16px;flex-wrap:wrap;">
+      <div class="card" style="border:2px dashed #1a73e8;flex:1;min-width:280px;">
+        <div class="card-title">工厂装箱手机入口</div>
+        <p style="color:#666;font-size:13px;margin-bottom:12px;">
+          工厂工人用手机微信扫码即可打开「装箱页」，扫箱码+逐个扫子码完成装箱。
+        </p>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <div style="background:#fff;padding:10px;border-radius:8px;border:1px solid var(--border);width:150px;">
+            <img src="/api/qr?data=<%= encodeURIComponent(factoryUrl) %>" alt="工厂入口二维码" style="width:100%;display:block;">
+          </div>
+          <div style="font-size:12px;color:#333;line-height:1.8;">
+            <div><code style="background:#f0f0f0;padding:2px 6px;border-radius:4px;"><%= factoryUrl %></code></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="card" style="border:2px dashed #4caf50;flex:1;min-width:280px;">
+        <div class="card-title">品牌方发货手机入口</div>
+        <p style="color:#666;font-size:13px;margin-bottom:12px;">
+          品牌方人员用手机微信扫码即可打开「发货页」，选代理商+扫码发货。
+        </p>
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;">
+          <div style="background:#fff;padding:10px;border-radius:8px;border:1px solid var(--border);width:150px;">
+            <img src="/api/qr?data=<%= encodeURIComponent(entryUrl) %>" alt="品牌方入口二维码" style="width:100%;display:block;">
+          </div>
+          <div style="font-size:12px;color:#333;line-height:1.8;">
+            <div><code style="background:#f0f0f0;padding:2px 6px;border-radius:4px;"><%= entryUrl %></code></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">最近扫码记录</div>
+      <% if (recentScans.length === 0) { %>
+        <p style="color: #666; text-align: center; padding: 20px;">暂无扫码记录</p>
+      <% } else { %>
+      <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th>扫码码</th>
+            <th>产品</th>
+            <th>代理商</th>
+            <th>扫码区域</th>
+            <th>状态</th>
+            <th>时间</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% recentScans.forEach(s => { %>
+          <tr>
+            <td style="font-family:monospace;font-size:12px;"><%= s.item_code %></td>
+            <td><%= s.product_name || '-' %></td>
+            <td><%= s.distributor_name || '-' %></td>
+            <td><%= s.scan_location || '-' %></td>
+            <td>
+              <% if (s.is_diversion >= 2) { %>
+                <span class="tag tag-red">重度串货</span>
+              <% } else if (s.is_diversion === 1) { %>
+                <span class="tag tag-yellow">轻度串货</span>
+              <% } else { %>
+                <span class="tag tag-green">正常</span>
+              <% } %>
+            </td>
+            <td style="font-size:12px;color:#666;"><%= s.scanned_at %></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+      </div>
+      <% } %>
+      <div style="margin-top:12px;text-align:right;">
+        <a href="/logs" class="btn btn-outline btn-sm">查看全部日志</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+  </script>
+</body>
+</html>

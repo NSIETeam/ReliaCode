@@ -1,0 +1,54 @@
+<%
+  // 顶部导航：iOS 风格 - 白底毛玻璃，左 Logo，右用户信息
+  // 桌面端：显示完整顶部链接导航；移动端：隐藏链接，改由 bottom-nav 接管
+  const u = user || null;
+  const r = u ? u.role : '';
+  const roleText = { admin: '平台管理员', brand: '品牌管理员', brand_staff: '品牌工作账号', factory: '工厂', warehouse: '品牌方', distributor: '代理商' };
+%>
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="topbar-logo"><%= brand || '溯源大师' %><% if (u && ['brand','brand_staff'].includes(u.role) && u.brand_name) { %><span style="font-size:12px;color:#666;margin-left:6px;">· <%= u.brand_name %></span><% } %></span>
+
+    <nav class="topnav desktop-only">
+      <% if (r === 'admin' || r === 'brand' || r === 'brand_staff') { %>
+        <a href="/" <%= active==='home'?'class="active"':'' %>>首页</a>
+        <a href="/admin/business" <%= active==='business'?'class="active"':'' %>>业务</a>
+        <a href="/alerts" <%= active==='alerts'?'class="active"':'' %>>预警<% if (alertsUnread > 0) { %><span class="tn-badge"><%= alertsUnread %></span><% } %></a>
+        <a href="/admin/me" <%= active==='me'?'class="active"':'' %>>我的</a>
+      <% } else if (r === 'factory') { %>
+        <a href="/factory" <%= active==='factory'?'class="active"':'' %>>工厂装箱</a>
+      <% } else if (r === 'warehouse') { %>
+        <a href="/warehouse" <%= active==='warehouse'?'class="active"':'' %>>品牌方发货</a>
+      <% } else if (r === 'distributor') { %>
+        <a href="/portal" <%= active==='portal'?'class="active"':'' %>>我的工作台</a>
+      <% } %>
+    </nav>
+
+    <% if (u) { %>
+      <div class="topbar-right">
+        <a href="/profile" class="tb-user" title="<%= u.display_name %>（<%= roleText[r] || r %>）">
+          <span class="avatar-circle"><%= (u.display_name || u.username).slice(0,1).toUpperCase() %></span>
+          <span class="tb-name desktop-only"><%= u.display_name %></span>
+        </a>
+        <a href="/logout" class="tb-logout desktop-only">退出</a>
+      </div>
+    <% } %>
+  </div>
+</header>
+
+<%- include('bottom-nav', { active: active, alertsUnread: alertsUnread }) %>
+
+<script>
+  // 全局 fetch 包装：登录过期（401 needLogin）自动跳转登录页
+  (function () {
+    const _fetch = window.fetch;
+    window.fetch = function () {
+      return _fetch.apply(this, arguments).then(res => {
+        if (res.status === 401) {
+          try { location.href = '/login'; } catch (e) {}
+        }
+        return res;
+      });
+    };
+  })();
+</script>

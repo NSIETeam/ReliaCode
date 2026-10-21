@@ -1,0 +1,471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>工厂装箱 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .state-idle { color:#999; }
+    .state-packing { color:#1a73e8; }
+    .state-full { color:#2e7d32; }
+    .big-status {
+      font-size:20px; font-weight:bold; text-align:center; padding:10px;
+      border-radius:8px; margin-bottom:12px;
+    }
+    .big-idle { background:#f5f5f5; color:#666; }
+    .big-packing { background:#e8f0fe; color:#1a73e8; }
+    .big-full { background:#e8f5e9; color:#2e7d32; }
+    .big-error { background:#fdecea; color:#c5221f; }
+    .big-select { background:#fff8e1; color:#b26a00; }
+  </style>
+</head>
+<body>
+  <%- include('partials/nav', { active: 'factory' }) %>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-title">工厂装箱</div>
+      <p style="color:#666;margin-bottom:12px;font-size:13px;">
+        一个框连续扫：<strong>扫箱码（B开头）</strong> → <strong>选产品+箱规</strong>（第一箱，之后自动沿用） → <strong>逐个扫子码（S开头）</strong>自动绑定 → 扫满自动完成，扫下一个箱码开始新一箱。产品不符 / 重复扫 / 多扫都会自动拦截。<br>
+        点<strong>「连续扫码」</strong>后摄像头保持常开：子码一个接一个扫，中途不用再点按钮；本箱扫满后直接把摄像头对准下一个箱码即可开新箱。
+      </p>
+
+      <!-- 大状态条 -->
+      <div id="bigStatus" class="big-status big-idle">请扫描箱码开始装箱</div>
+
+      <!-- 唯一扫码输入框 -->
+      <div class="scan-box">
+        <div style="font-size:36px;margin-bottom:8px;" id="scanIcon"><%- icon('box', 'ui-icon-lg') %></div>
+        <div style="display:flex;gap:8px;justify-content:center;max-width:440px;margin:0 auto;">
+          <input type="text" id="scanInput" class="form-control scan-box-input"
+            placeholder="扫箱码(B开头) / 扫子码(S开头)" style="flex:1;" autofocus autocomplete="off">
+          <button type="button" class="btn btn-outline" onclick="cameraScan()" style="white-space:nowrap;"><%- icon('camera') %> 连续扫码</button>
+        </div>
+      </div>
+
+      <!-- 选择产品面板（空白箱码装箱第一步 / 换产品） -->
+      <div id="productPanel" style="display:none;margin-top:16px;background:#fff8e1;border:1px solid #ffe082;border-radius:8px;padding:14px;">
+        <div style="font-weight:bold;margin-bottom:10px;"><%- icon('cart') %> 本箱装什么产品？<span id="productPanelBox" style="font-weight:normal;color:#666;font-size:13px;"></span></div>
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px;">
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:13px;">产品</label>
+            <select id="selProduct" class="form-control"><option value="">加载中...</option></select>
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:13px;">箱规（每箱几个）</label>
+            <input type="number" id="selBoxSize" class="form-control" min="1" placeholder="如：8">
+          </div>
+          <div class="form-group" style="margin-bottom:0;">
+            <label style="font-size:13px;">批次号（选填）</label>
+            <input type="text" id="selBatch" class="form-control" placeholder="如：20260829">
+          </div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn btn-primary" onclick="confirmProduct()"><%- icon('check') %> 确认，开始扫子码</button>
+          <button class="btn btn-outline" onclick="hideProductPanel()">取消</button>
+        </div>
+      </div>
+
+      <!-- 当前箱信息 -->
+      <div id="boxPanel" style="display:none;margin-top:16px;">
+        <!-- 箱信息 -->
+        <div style="background:#f8f9fa;border-radius:8px;padding:12px;margin-bottom:12px;">
+          <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+            <div>
+              <div style="font-size:12px;color:#999;">箱码</div>
+              <div id="curBoxCode" style="font-family:monospace;font-weight:bold;"></div>
+            </div>
+            <div>
+              <div style="font-size:12px;color:#999;">产品</div>
+              <div id="curProduct"></div>
+            </div>
+            <div>
+              <div style="font-size:12px;color:#999;">批次</div>
+              <div id="curBatch"></div>
+            </div>
+            <div>
+              <div style="font-size:12px;color:#999;">箱规（可改）</div>
+              <div style="display:flex;gap:6px;align-items:center;">
+                <input type="number" id="boxSizeInput" class="form-control" min="1" style="width:80px;padding:4px 8px;">
+                <button class="btn btn-outline btn-sm" onclick="applyBoxSize()">改</button>
+              </div>
+            </div>
+            <div>
+              <div style="font-size:12px;color:#999;">&nbsp;</div>
+              <button class="btn btn-outline btn-sm" onclick="changeProduct()"><%- icon('refresh') %> 换产品</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 进度 -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <span style="font-weight:bold;">装箱进度</span>
+          <span id="progressText" style="font-size:22px;font-weight:bold;color:#1a73e8;">0 / 0</span>
+        </div>
+        <div style="background:#e0e0e0;border-radius:12px;height:14px;overflow:hidden;margin-bottom:16px;">
+          <div id="progressBar" style="background:#1a73e8;height:100%;width:0%;transition:width 0.3s;border-radius:12px;"></div>
+        </div>
+
+        <!-- 已绑子码列表 -->
+        <div style="font-weight:bold;margin-bottom:8px;">已绑子码 (<span id="boundCount">0</span>)</div>
+        <div id="itemList" style="max-height:260px;overflow-y:auto;border:1px solid var(--border);border-radius:8px;padding:8px;min-height:56px;">
+          <p style="color:#999;text-align:center;padding:16px 0;">暂无子码</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 本次会话统计 -->
+    <div class="card">
+      <div class="card-title">本次会话统计</div>
+      <div style="display:flex;gap:24px;text-align:center;flex-wrap:wrap;">
+        <div style="flex:1;min-width:100px;">
+          <div style="font-size:28px;font-weight:bold;color:#1a73e8;" id="statBoxes">0</div>
+          <div style="color:#999;font-size:13px;">完成箱数</div>
+        </div>
+        <div style="flex:1;min-width:100px;">
+          <div style="font-size:28px;font-weight:bold;color:#2e7d32;" id="statItems">0</div>
+          <div style="color:#999;font-size:13px;">绑定子码</div>
+        </div>
+        <div style="flex:1;min-width:100px;">
+          <div style="font-size:28px;font-weight:bold;color:#c5221f;" id="statErrors">0</div>
+          <div style="color:#999;font-size:13px;">扫错次数</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/html5-qrcode.min.js"></script>
+  <script src="/js/scanner.js"></script>
+  <script>
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      setTimeout(() => t.remove(), 3000);
+      document.body.appendChild(t);
+    }
+
+    function escapeHtml(value) {
+      return String(value == null ? '' : value).replace(/[&<>"']/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      })[ch]);
+    }
+    function iconSvg(name) {
+      const allowed = new Set(['alert', 'box', 'check', 'cart', 'refresh']);
+      const safe = allowed.has(name) ? name : 'box';
+      return `<svg class="ui-icon ui-icon-lg" aria-hidden="true"><use href="/icons/ui.svg#${safe}"></use></svg>`;
+    }
+
+    let currentBox = null;   // 当前装箱中的箱信息
+    let boxSize = 0;         // 当前箱规
+    let products = [];       // 可选产品列表
+    let stat = { boxes: 0, items: 0, errors: 0 };
+    let errorTimer = null;
+
+    // 沿用上一箱的产品+箱规（刷新页面也不丢）
+    function getLastPack() {
+      try { return JSON.parse(sessionStorage.getItem('lastPack') || 'null'); } catch(e) { return null; }
+    }
+    function setLastPack(p) {
+      try { sessionStorage.setItem('lastPack', JSON.stringify(p)); } catch(e) {}
+    }
+
+    const scanInput = document.getElementById('scanInput');
+    scanInput.addEventListener('keypress', e => { if (e.key === 'Enter') handleScan(); });
+    scanInput.focus();
+
+    // 加载本厂可选产品
+    (async function loadProducts() {
+      try {
+        const res = await fetch('/api/products');
+        const data = await res.json();
+        products = (data.products || []).map(p => ({
+          id: p.id, name: p.name, spec: p.spec || '', box_size: p.box_size || 0, batch_no: p.batch_no || ''
+        }));
+        renderProductOptions();
+      } catch (e) {
+        products = [];
+      }
+    })();
+
+    function renderProductOptions(selectedId) {
+      const sel = document.getElementById('selProduct');
+      sel.innerHTML = '<option value="">请选择产品</option>' + products.map(p =>
+        `<option value="${Number(p.id)}">${escapeHtml(p.name)}${p.spec ? ' (' + escapeHtml(p.spec) + ')' : ''}${p.box_size ? ' · 默认箱规' + Number(p.box_size) : ''}</option>`
+      ).join('');
+      if (selectedId) sel.value = String(selectedId);
+    }
+
+    function setBigStatus(text, cls, iconName) {
+      const el = document.getElementById('bigStatus');
+      el.textContent = text;
+      el.className = 'big-status ' + cls;
+      document.getElementById('scanIcon').innerHTML = iconSvg(iconName);
+    }
+
+    // 连续扫码：摄像头常开，识别到码直接处理（箱码/子码自动区分），中途无需再点按钮
+    let scanning = false;                    // 摄像头连续扫码是否进行中
+    let resumeScanAfterProduct = false;      // 选完产品后是否自动恢复连续扫码
+
+    function cameraScan() {
+      scanning = true;
+      const tip = currentBox
+        ? `连续扫码：子码(S开头) ${boxSize > 0 ? '· ' + (parseInt(document.getElementById('boundCount').textContent) || 0) + '/' + boxSize : ''} · 箱满后直接扫下一箱码`
+        : '连续扫码：请先扫箱码(B开头)';
+      openScanner({
+        title: tip,
+        continuous: true,
+        onScanned: code => processCode(code)
+      });
+    }
+
+    // 输入框/扫码枪回车入口
+    async function handleScan() {
+      const code = extractCode(scanInput.value);
+      scanInput.value = '';
+      if (!code) return;
+      await processCode(code);
+      if (!scanning) scanInput.focus();
+    }
+
+    // 核心：自动识别 B开头=箱码 / S开头=子码
+    async function processCode(code) {
+      if (/^B/i.test(code)) {
+        await startPacking(code);
+      } else if (/^S/i.test(code)) {
+        await scanItem(code);
+      } else {
+        flashError('无法识别：' + code + '（B开头是箱码，S开头是子码）');
+      }
+    }
+
+    function flashError(msg) {
+      stat.errors++;
+      document.getElementById('statErrors').textContent = stat.errors;
+      // 大状态条闪红2秒后恢复
+      setBigStatus(msg, 'big-error', 'alert');
+      toast(msg, 'error');
+      clearTimeout(errorTimer);
+      errorTimer = setTimeout(() => {
+        if (currentBox) {
+          const bound = parseInt(document.getElementById('boundCount').textContent) || 0;
+          if (boxSize > 0 && bound >= boxSize) {
+            setBigStatus(`本箱已完成（${bound}/${boxSize}），扫下一个箱码开始新箱`, 'big-full', 'check');
+          } else {
+            setBigStatus(`正在装箱：${currentBox.box_code}（${bound}/${boxSize || '?'}）`, 'big-packing', 'box');
+          }
+        } else {
+          setBigStatus('请扫描箱码开始装箱', 'big-idle', 'box');
+        }
+      }, 2000);
+    }
+
+    // ---- 选择产品面板 ----
+    function showProductPanel(boxCode, prefillProduct) {
+      const panel = document.getElementById('productPanel');
+      document.getElementById('productPanelBox').textContent = boxCode ? '（箱码：' + boxCode + '）' : '';
+      renderProductOptions(prefillProduct && prefillProduct.id);
+      const sel = document.getElementById('selProduct');
+      if (prefillProduct) {
+        const p = products.find(x => x.id === prefillProduct.id) || prefillProduct;
+        document.getElementById('selBoxSize').value = prefillProduct.box_size || p.box_size || '';
+        document.getElementById('selBatch').value = prefillProduct.batch_no || '';
+      } else {
+        document.getElementById('selBoxSize').value = '';
+        document.getElementById('selBatch').value = '';
+      }
+      panel.style.display = '';
+      if (!prefillProduct) sel.focus();
+    }
+    function hideProductPanel() {
+      document.getElementById('productPanel').style.display = 'none';
+      // 若连续扫码因弹表单被暂停，自动恢复摄像头（确认产品/取消都走这里）
+      if (resumeScanAfterProduct && !scanning) {
+        resumeScanAfterProduct = false;
+        cameraScan();
+      } else if (!scanning) {
+        scanInput.focus();
+      }
+    }
+
+    // 确认产品+箱规
+    async function confirmProduct() {
+      if (!currentBox) return hideProductPanel();
+      const productId = parseInt(document.getElementById('selProduct').value);
+      const size = parseInt(document.getElementById('selBoxSize').value);
+      const batch = document.getElementById('selBatch').value.trim();
+      if (!productId) return toast('请选择产品', 'error');
+      if (!size || size < 1) return toast('请输入有效箱规（每箱装几个）', 'error');
+
+      const res = await fetch('/api/factory/pack/set-product', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ box_code: currentBox.box_code, product_id: productId, box_size: size, batch_no: batch })
+      });
+      const data = await res.json();
+      if (!data.success) return flashError(data.msg || '设置产品失败');
+
+      const p = products.find(x => x.id === productId);
+      setLastPack({ id: productId, name: p ? p.name : '', box_size: size, batch_no: batch });
+      // 重新拉取箱信息（此时已带产品）；hideProductPanel 会自动恢复连续扫码
+      await startPacking(currentBox.box_code, true);
+      hideProductPanel();
+    }
+
+    // 换产品（当前箱）
+    function changeProduct() {
+      if (!currentBox) return;
+      // 弹表单前暂停摄像头，确认后自动恢复
+      resumeScanAfterProduct = scanning;
+      if (scanning) { stopScanner(); scanning = false; }
+      const cur = currentBox.product_id ? {
+        id: currentBox.product_id,
+        box_size: boxSize,
+        batch_no: currentBox.batch_no || ''
+      } : getLastPack();
+      showProductPanel(currentBox.box_code, cur);
+      setBigStatus('请选择新产品并确认箱规', 'big-select', 'refresh');
+    }
+
+    // ---- 扫箱码：开始/切换装箱 ----
+    async function startPacking(boxCode, isRefresh) {
+      const res = await fetch('/api/factory/pack/start', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ box_code: boxCode })
+      });
+      const data = await res.json();
+      if (!data.success) return flashError(data.msg || '箱码不存在');
+
+      currentBox = data.box;
+
+      // 空白箱码：需要先选产品
+      if (data.need_product) {
+        const last = getLastPack();
+        if (last && !isRefresh) {
+          // 自动沿用上一箱的产品+箱规，直接进入扫码
+          const r2 = await fetch('/api/factory/pack/set-product', {
+            method: 'POST', headers: {'Content-Type':'application/json'},
+            body: JSON.stringify({ box_code: boxCode, product_id: last.id, box_size: last.box_size, batch_no: last.batch_no || '' })
+          });
+          const d2 = await r2.json();
+          if (d2.success) {
+            return startPacking(boxCode, true);
+          }
+          // 沿用失败（如产品下架/权限变化），回落到手动选择
+          toast(d2.msg || '沿用上一箱产品失败，请手动选择', 'error');
+        }
+        boxSize = 0;
+        document.getElementById('boxPanel').style.display = 'none';
+        // 需要手动选产品时暂停摄像头（表单在遮罩下方无法操作），确认后自动恢复
+        resumeScanAfterProduct = scanning;
+        if (scanning) { stopScanner(); scanning = false; }
+        showProductPanel(boxCode, last);
+        setBigStatus('已识别箱码，请选择本箱产品并确认箱规', 'big-select', 'cart');
+        return;
+      }
+
+      // 箱规自动带产品默认值（或沿用值）
+      boxSize = data.box_size || boxSize || 0;
+      document.getElementById('boxSizeInput').value = boxSize || '';
+
+      hideProductPanel();
+      document.getElementById('boxPanel').style.display = '';
+      document.getElementById('curBoxCode').textContent = currentBox.box_code;
+      document.getElementById('curProduct').textContent = (currentBox.product_name || '-') + (currentBox.product_spec ? ' (' + currentBox.product_spec + ')' : '');
+      document.getElementById('curBatch').textContent = currentBox.batch_no || '-';
+
+      updateItemList(data.items);
+      updateProgress();
+
+      if (data.bound_count > 0) {
+        toast(`该箱已有 ${data.bound_count} 个子码，继续扫码即可`, 'success');
+        if (boxSize > 0 && data.bound_count >= boxSize) {
+          setBigStatus(`该箱已装满（${data.bound_count}/${boxSize}），扫下一个箱码开始新箱`, 'big-full', 'check');
+        } else {
+          setBigStatus(`继续装箱：${currentBox.product_name}（${data.bound_count}/${boxSize || '?'}）`, 'big-packing', 'box');
+        }
+      } else {
+        setBigStatus(boxSize > 0
+          ? `开始装箱：${currentBox.product_name}，请扫 ${boxSize} 个子码`
+          : `开始装箱：${currentBox.product_name}（未设箱规，请先在下方填写）`, 'big-packing', 'box');
+      }
+    }
+
+    // ---- 扫子码：绑定到当前箱 ----
+    async function scanItem(itemCode) {
+      if (!currentBox) return flashError('请先扫箱码（B开头）再扫子码');
+      if (!currentBox.product_id) return flashError('本箱还未选产品，请先在上方选择产品');
+
+      const res = await fetch('/api/factory/pack/scan', {
+        method: 'POST', headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ box_code: currentBox.box_code, item_code: itemCode, box_size: boxSize })
+      });
+      const data = await res.json();
+
+      if (!data.success) {
+        if (data.bound_count !== undefined) {
+          document.getElementById('boundCount').textContent = data.bound_count;
+        }
+        return flashError(data.msg || '绑定失败');
+      }
+
+      // 后端箱规兜底（首次未填箱规时从产品默认取）
+      if (data.box_size && !boxSize) {
+        boxSize = data.box_size;
+        document.getElementById('boxSizeInput').value = boxSize;
+      }
+
+      stat.items++;
+      document.getElementById('statItems').textContent = stat.items;
+      updateItemList(data.items || []);
+      updateProgress();
+
+      if (data.full) {
+        stat.boxes++;
+        document.getElementById('statBoxes').textContent = stat.boxes;
+        setBigStatus(`本箱装箱完成（${data.bound_count}/${data.box_size}）！扫下一个箱码开始新箱`, 'big-full', 'check');
+        toast(`本箱完成！共 ${data.bound_count} 个，扫下一个箱码继续`, 'success');
+      } else {
+        setBigStatus(`正在装箱：${currentBox.product_name}（${data.bound_count}/${data.box_size || '?'}）`, 'big-packing', 'box');
+        toast(`绑定成功 (${data.bound_count}/${data.box_size || '?'})`, 'success');
+      }
+    }
+
+    // 手动修改箱规
+    function applyBoxSize() {
+      const size = parseInt(document.getElementById('boxSizeInput').value);
+      if (!size || size < 1) return toast('请输入有效箱规', 'error');
+      boxSize = size;
+      const last = getLastPack();
+      if (last) setLastPack({ ...last, box_size: size });  // 同步沿用箱规
+      updateProgress();
+      toast('箱规已改为 ' + size, 'success');
+      const bound = parseInt(document.getElementById('boundCount').textContent) || 0;
+      if (bound >= size) {
+        setBigStatus(`本箱已完成（${bound}/${size}），扫下一个箱码开始新箱`, 'big-full', 'check');
+      } else {
+        setBigStatus(`正在装箱：${currentBox.box_code}（${bound}/${size}）`, 'big-packing', 'box');
+      }
+      scanInput.focus();
+    }
+
+    function updateItemList(items) {
+      const list = document.getElementById('itemList');
+      document.getElementById('boundCount').textContent = items.length;
+      list.innerHTML = items.length === 0
+        ? '<p style="color:#999;text-align:center;padding:16px 0;">暂无子码</p>'
+        : items.map((it, i) => `
+          <div style="display:flex;justify-content:space-between;padding:6px 8px;border-bottom:1px solid #f0f0f0;font-size:13px;">
+            <span style="font-family:monospace;">${i+1}. ${escapeHtml(it.item_code)}</span>
+            <span style="color:#999;font-size:12px;">${escapeHtml(it.created_at || '')}</span>
+          </div>`).join('');
+    }
+
+    function updateProgress() {
+      const bound = parseInt(document.getElementById('boundCount').textContent) || 0;
+      document.getElementById('progressText').textContent = bound + ' / ' + (boxSize || '?');
+      document.getElementById('progressBar').style.width = boxSize > 0 ? Math.min(bound/boxSize*100, 100) + '%' : '0%';
+    }
+  </script>
+</body>
+</html>

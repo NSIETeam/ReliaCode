@@ -1,0 +1,26 @@
+{
+  "name": "reliacode-operations-mvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node server.mjs",
+    "start": "node server.mjs",
+    "test:e2e": "node tests/e2e.mjs",
+    "test:mobile": "node tests/mobile-and-edge.mjs",
+    "test:agent": "node tests/agent.mjs",
+    "test:domain-api": "node tests/domain-api.e2e.mjs",
+    "test:documents": "node tests/document-console.e2e.mjs",
+    "test:governance": "node tests/governance-console.e2e.mjs",
+    "test:persistence": "node tests/persistence.test.mjs",
+    "test:proxy-security": "node --test tests/proxy-security.test.mjs",
+    "test": "node tests/run-suite.mjs"
+  },
+  "devDependencies": {
+    "jsqr": "^1.4.0",
+    "playwright": "^1.62.1"
+  },
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
+  }
+}

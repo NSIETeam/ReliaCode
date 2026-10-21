@@ -1,0 +1,11 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { hashToken } from "../src/auth.mjs";
+import { createLocalSession,rotateLocalSession } from "../src/session-security.mjs";
+
+const config={SESSION_COOKIE_NAME:"reliacode_session",CSRF_COOKIE_NAME:"reliacode_csrf",SESSION_COOKIE_SECURE:true,SESSION_TTL_HOURS:24,SESSION_ROTATION_MINUTES:15,SESSION_FINGERPRINT_KEY:Buffer.alloc(32,6).toString("base64url")};
+const userId="11111111-1111-4111-8111-111111111111",tenantId="22222222-2222-4222-8222-222222222222";
+
+test("session creation records a high-risk login when both network and device change",async()=>{const calls=[],db={transaction:async work=>work({query:async(sql,params)=>{calls.push({sql,params});if(sql.startsWith("SELECT ip_hash"))return{rowCount:1,rows:[{ip_hash:"different",user_agent:"Old Browser"}]};return{rowCount:1,rows:[]};}})};const session=await createLocalSession(db,config,{userId,tenantId,request:{ip:"203.0.113.7",headers:{"user-agent":"New Browser"}},authMethod:"PASSKEY"});assert.equal(session.riskLevel,"HIGH");const inserted=calls.find(call=>call.sql.includes("INSERT INTO admin_sessions"));assert.equal(inserted.params[3],tenantId);assert.equal(inserted.params[4],"PASSKEY");assert.notEqual(inserted.params[5],"203.0.113.7");const event=calls.find(call=>call.sql.includes("INSERT INTO authentication_events"));assert.equal(event.params[2],"LOGIN_RISK_DETECTED");});
+
+test("session rotation atomically invalidates the old token and returns a new CSRF token",async()=>{const calls=[],headers={},db={query:async(sql,params)=>{calls.push({sql,params});if(sql.startsWith("UPDATE admin_sessions SET token_hash"))return{rowCount:1,rows:[{tenant_id:tenantId,user_id:userId,risk_level:"LOW"}]};return{rowCount:1,rows:[]};}},request={ip:"8.8.8.8",headers:{"user-agent":"Browser"},authSession:{token_hash:hashToken("old-token"),csrf_token_hash:hashToken("old-csrf"),rotated_at:new Date(Date.now()-16*60000),risk_level:"LOW"}},reply={header(name,value){headers[name]=value;}};const rotated=await rotateLocalSession(db,config,request,reply);assert.ok(rotated.csrf);assert.notEqual(request.authSession.token_hash,hashToken("old-token"));assert.equal(calls[0].params[4],hashToken("old-token"));assert.match(headers["set-cookie"][0],/Secure/);assert.equal(headers["x-csrf-token"],rotated.csrf);});

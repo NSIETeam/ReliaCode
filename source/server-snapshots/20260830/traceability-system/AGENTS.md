@@ -1,0 +1,28 @@
+# ReliaCode server coordination note
+
+This directory is a live production-pilot deployment. Do not replace `server.js`,
+`database.js`, or files under `views/` with an older local copy.
+
+Before making changes:
+
+1. Read this file and inspect the current live files first.
+2. Compare SHA-256 hashes immediately before deployment.
+3. Back up every file that will be replaced under `backups/<timestamp>/`.
+4. Apply a minimal patch to the current live version; do not upload a whole stale tree.
+5. Run `node --check server.js`, authenticated smoke tests, and `nginx -t`.
+6. Restart with PM2, run `pm2 save`, and confirm ports and public HTTPS health.
+
+Required fixes that must not be reverted:
+
+- Node listens on `127.0.0.1:3000`; only Nginx exposes the application.
+- Public QR URLs follow the trusted proxy protocol and therefore use HTTPS in production.
+- Generated box/item results include their database `id` so the generation page can
+  download exactly the codes from the current operation.
+- `/print` permits both platform administrators and brand administrators.
+- Code-package QR/SVG generation receives a request-local base URL; never restore a
+  process-global request host cache.
+- Session cookies use `httpOnly`, `sameSite=lax`, and `secure=auto` behind Nginx.
+
+The preferred long-term deployment source is a reviewed Git commit and GitHub Actions,
+not direct ad-hoc root uploads. If another agent is actively changing this deployment,
+coordinate with the user before overwriting its work.

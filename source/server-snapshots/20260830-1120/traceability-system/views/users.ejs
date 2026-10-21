@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>账号管理 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css">
+  <style>
+    .modal-mask { display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:100;
+      align-items:center; justify-content:center; }
+    .modal-mask.show { display:flex; }
+    .modal { background:#fff; border-radius:12px; padding:24px; width:400px; max-width:92vw; max-height:90vh; overflow:auto; }
+    .modal h3 { margin-bottom:16px; font-size:16px; }
+  </style>
+</head>
+<body>
+  <%- include('partials/nav', { active: 'users' }) %>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>账号管理</span>
+        <button class="btn btn-primary btn-sm" onclick="openCreate()">＋ 新建账号</button>
+      </div>
+      <p style="color:#666;font-size:13px;margin-bottom:12px;">
+        角色说明：平台管理员=全部功能（含品牌管理）；品牌管理员=本品牌的完整独立界面（产品/码/工厂/代理商/发货/预警）；工厂装箱=仅装箱作业（只管理本厂产品）；品牌方=仅发货作业；代理商=仅查看自己的库存与扫码数据。<br>
+        合作方自助注册：在下方「邀请码管理」生成邀请码发给合作工厂/代理商，对方打开登录页点「注册账号」凭码自助注册。<br>
+        <b>多品牌售卖流程：</b>先在「品牌管理」创建品牌 → 在上方「新建账号」选角色「品牌管理员」并绑定该品牌 → 把账号密码交给客户，客户登录后只能看到自己品牌的数据。
+      </p>
+      <table class="table">
+        <thead>
+          <tr>
+            <th>账号</th><th>姓名</th><th>手机号</th><th>角色</th><th>归属品牌</th><th>绑定工厂</th><th>绑定代理商</th>
+            <th>状态</th><th>最近登录</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% users.forEach(u => { %>
+          <tr>
+            <td style="font-family:monospace;"><%= u.username %></td>
+            <td><%= u.display_name || '-' %></td>
+            <td style="font-family:monospace;"><%= u.phone || '-' %></td>
+            <td><span class="tag <%= u.role==='admin' ? 'tag-blue' : (u.role==='brand' ? 'tag-yellow' : 'tag-green') %>"><%= roleNames[u.role] || u.role %></span></td>
+            <td><%= u.role === 'admin' ? '全部品牌' : (u.brand_name || '<未绑定>') %></td>
+            <td><%= u.factory_name || '-' %></td>
+            <td><%= u.distributor_name || '-' %></td>
+            <td><%= u.enabled ? '<span class="tag tag-green">启用</span>' : '<span class="tag tag-red">停用</span>' %></td>
+            <td style="font-size:12px;color:#666;"><%= u.last_login_at || '从未登录' %></td>
+            <td style="white-space:nowrap;">
+              <button class="btn btn-outline btn-sm" onclick="openEdit(<%= u.id %>)">编辑</button>
+              <button class="btn btn-outline btn-sm" onclick="resetPwd(<%= u.id %>, '<%= u.username %>')">重置密码</button>
+              <% if (u.username !== 'admin') { %>
+                <button class="btn btn-outline btn-sm" onclick="toggleUser(<%= u.id %>, <%= u.enabled ? 0 : 1 %>)"><%= u.enabled ? '停用' : '启用' %></button>
+                <button class="btn btn-outline btn-sm" style="color:#c62828;" onclick="delUser(<%= u.id %>, '<%= u.username %>')">删除</button>
+              <% } %>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+
+    <% if (user.role === 'admin') { %>
+    <!-- 品牌管理（平台管理员专用） -->
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>品牌管理</span>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="brandName" class="form-control" placeholder="品牌名称" style="width:150px;padding:6px 10px;">
+          <input type="text" id="brandContact" class="form-control" placeholder="联系人（选填）" style="width:150px;padding:6px 10px;">
+          <button class="btn btn-primary btn-sm" onclick="createBrand()">＋ 新建品牌</button>
+        </div>
+      </div>
+      <p style="color:#666;font-size:13px;margin-bottom:12px;">
+        每个品牌是一套独立的数据空间：产品、码、工厂、代理商、发货、预警互不可见。创建品牌后，在上方「新建账号」选角色「品牌管理员」并绑定该品牌，账号密码交给客户即可。
+      </p>
+      <table class="table">
+        <thead>
+          <tr><th>品牌</th><th>联系人</th><th>产品</th><th>工厂</th><th>代理商</th><th>账号</th><th>状态</th><th>创建时间</th><th>操作</th></tr>
+        </thead>
+        <tbody id="brandBody">
+          <tr><td colspan="9" style="text-align:center;color:#999;">加载中…</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <% } %>
+
+    <!-- 工厂列表（admin/brand/brand_staff 可管理） -->
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>工厂管理</span>
+        <button class="btn btn-primary btn-sm" onclick="addFactory()">＋ 新建工厂</button>
+      </div>
+      <p style="color:#666;font-size:13px;margin-bottom:12px;">
+        工厂用于组织装箱团队，归属于品牌。<strong>码只归属品牌</strong>，品牌旗下任意工厂账号都能扫码装箱，无需按工厂区分。删除工厂时，相关产品/箱码/子码的工厂引用会自动清空（码本身保留），但若工厂下还有账号则需先解绑。
+      </p>
+      <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr><th>ID</th><th>工厂名</th><th>联系人</th><th>归属品牌</th><th>账号数</th><th>创建时间</th><th style="width:90px;">操作</th></tr>
+        </thead>
+        <tbody id="factoryBody">
+          <tr><td colspan="7" style="text-align:center;color:#999;">加载中…</td></tr>
+        </tbody>
+      </table>
+      </div>
+    </div>
+
+    <!-- 邀请码管理 -->
+    <div class="card" style="margin-top:16px;">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>邀请码管理</span>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <% if (user.role === 'admin') { %>
+          <select id="invBrand" class="form-control" style="width:auto;padding:6px 10px;">
+            <option value="">选择品牌（注册归属）</option>
+            <% brands.forEach(b => { %>
+              <option value="<%= b.id %>"><%= b.name %></option>
+            <% }); %>
+          </select>
+          <% } %>
+          <select id="invRole" class="form-control" style="width:auto;padding:6px 10px;">
+            <option value="factory">工厂注册码</option>
+            <option value="distributor">代理商注册码</option>
+          </select>
+          <input type="text" id="invNote" class="form-control" placeholder="备注（发给谁）" style="width:160px;padding:6px 10px;">
+          <button class="btn btn-primary btn-sm" onclick="genInvite()">＋ 生成邀请码</button>
+        </div>
+      </div>
+      <p style="color:#666;font-size:13px;margin-bottom:12px;">
+        生成后把注册链接或邀请码发给合作方：对方打开 <b>/register</b> 页面凭码自助注册，注册即用，每个码只能用一次。<% if (user.role === 'admin') { %>平台管理员生成时请先选择归属品牌，否则该码注册的账号将不属于任何品牌。<% } %>
+      </p>
+      <table class="table">
+        <thead>
+          <tr><th>邀请码</th><th>类型</th><th>归属品牌</th><th>备注</th><th>状态</th><th>注册账号</th><th>生成时间</th><th>操作</th></tr>
+        </thead>
+        <tbody id="invBody">
+          <% if (!invitations.length) { %>
+          <tr><td colspan="8" style="text-align:center;color:#999;">暂无邀请码，点击右上角生成</td></tr>
+          <% } %>
+          <% invitations.forEach(v => { %>
+          <tr id="invRow-<%= v.id %>">
+            <td style="font-family:monospace;font-weight:600;"><%= v.code %></td>
+            <td><span class="tag <%= v.role==='factory' ? 'tag-green' : 'tag-blue' %>"><%= v.role==='factory' ? '工厂' : '代理商' %></span></td>
+            <td><%= v.brand_name || '<未指定>' %></td>
+            <td><%= v.note || '-' %></td>
+            <td><% if (v.status === 0) { %><span class="tag tag-green">未使用</span><% } else if (v.status === 1) { %><span class="tag" style="background:#eee;color:#666;">已使用</span><% } else { %><span class="tag tag-red">已作废</span><% } %></td>
+            <td style="font-family:monospace;"><%= v.used_by || '-' %></td>
+            <td style="font-size:12px;color:#666;"><%= v.created_at %></td>
+            <td style="white-space:nowrap;">
+              <% if (v.status === 0) { %>
+                <button class="btn btn-outline btn-sm" onclick="copyInvite('<%= v.code %>')">复制链接</button>
+                <button class="btn btn-outline btn-sm" style="color:#e65100;" onclick="revokeInvite(<%= v.id %>)">作废</button>
+              <% } %>
+              <button class="btn btn-outline btn-sm" style="color:#c62828;" onclick="delInvite(<%= v.id %>, '<%= v.code %>', <%= v.status %>)">删除</button>
+            </td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- 新建/编辑弹窗 -->
+  <div class="modal-mask" id="mask">
+    <div class="modal">
+      <h3 id="modalTitle">新建账号</h3>
+      <div class="form-group">
+        <label>账号（3-20位字母/数字/下划线）</label>
+        <input type="text" id="fUsername" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>姓名（用于操作留痕显示）</label>
+        <input type="text" id="fDisplay" class="form-control">
+      </div>
+      <div class="form-group">
+        <label>手机号（工厂装箱账号必填）</label>
+        <input type="tel" id="fPhone" class="form-control" placeholder="11位手机号" maxlength="11">
+      </div>
+      <div class="form-group">
+        <label>角色</label>
+        <select id="fRole" class="form-control">
+          <% if (user.role === 'admin') { %>
+          <option value="admin">平台管理员</option>
+          <option value="brand">品牌管理员</option>
+          <% } %>
+          <option value="brand_staff">品牌方工作账号</option>
+          <option value="factory">工厂装箱</option>
+          <option value="warehouse">品牌方</option>
+          <option value="distributor">代理商</option>
+        </select>
+      </div>
+      <div class="form-group" id="brandGroup" style="display:none;">
+        <label>归属品牌（品牌管理员必选）</label>
+        <select id="fBrand" class="form-control">
+          <option value="">请选择品牌</option>
+          <% brands.forEach(b => { %>
+            <option value="<%= b.id %>"><%= b.name %></option>
+          <% }); %>
+        </select>
+      </div>
+      <div class="form-group" id="facGroup" style="display:none;">
+        <label>绑定工厂</label>
+        <div style="display:flex;gap:8px;">
+          <select id="fFactory" class="form-control" style="flex:1;">
+            <option value="">请选择工厂</option>
+            <% factories.forEach(f => { %>
+              <option value="<%= f.id %>"><%= f.name %></option>
+            <% }); %>
+          </select>
+          <button type="button" class="btn btn-outline btn-sm" onclick="newFactory()">＋新建</button>
+        </div>
+      </div>
+      <div class="form-group" id="distGroup" style="display:none;">
+        <label>绑定代理商</label>
+        <select id="fDistributor" class="form-control">
+          <option value="">请选择代理商</option>
+          <% distributors.forEach(d => { %>
+            <option value="<%= d.id %>"><%= d.name %>（<%= d.region || '未设置区域' %>）</option>
+          <% }); %>
+        </select>
+      </div>
+      <div class="form-group" id="pwdGroup">
+        <label>初始密码（至少6位）</label>
+        <input type="text" id="fPassword" class="form-control" placeholder="至少6位">
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:20px;">
+        <button class="btn btn-outline" onclick="closeModal()">取消</button>
+        <button class="btn btn-primary" onclick="saveUser()">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let editingId = null;
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+    const usersData = <%- JSON.stringify(users) %>;
+    const myRole = <%- JSON.stringify(user && user.role) %>;
+    const ROLE_TEXT = { admin: '平台管理员', brand: '品牌管理员', brand_staff: '品牌方工作账号' };
+
+    function openCreate() {
+      editingId = null;
+      document.getElementById('modalTitle').textContent = '新建账号';
+      document.getElementById('fUsername').value = '';
+      document.getElementById('fUsername').disabled = false;
+      document.getElementById('fDisplay').value = '';
+      document.getElementById('fPhone').value = '';
+      document.getElementById('fRole').disabled = false;
+      document.getElementById('fRole').value = 'factory';
+      document.getElementById('fPassword').value = '';
+      document.getElementById('fPassword').parentElement.style.display = '';
+      document.getElementById('distGroup').style.display = 'none';
+      document.getElementById('facGroup').style.display = '';
+      document.getElementById('brandGroup').style.display = 'none';
+      document.getElementById('fBrand').value = '';
+      document.getElementById('mask').classList.add('show');
+    }
+    function openEdit(id) {
+      const u = usersData.find(x => x.id === id);
+      if (!u) return;
+      editingId = id;
+      document.getElementById('modalTitle').textContent = '编辑账号：' + u.username;
+      document.getElementById('fUsername').value = u.username;
+      document.getElementById('fUsername').disabled = true;
+      document.getElementById('fDisplay').value = u.display_name || '';
+      document.getElementById('fPhone').value = u.phone || '';
+      const fRole = document.getElementById('fRole');
+      if (![...fRole.options].some(o => o.value === u.role) && ROLE_TEXT[u.role]) {
+        const opt = document.createElement('option');
+        opt.value = u.role; opt.textContent = ROLE_TEXT[u.role];
+        fRole.appendChild(opt);
+      }
+      fRole.value = u.role;
+      // 品牌管理员无权修改平台/品牌管理员的角色，锁定下拉
+      fRole.disabled = myRole !== 'admin' && ['admin', 'brand'].includes(u.role);
+      document.getElementById('fPassword').value = '';
+      document.getElementById('fPassword').parentElement.style.display = 'none';
+      document.getElementById('distGroup').style.display = u.role === 'distributor' ? '' : 'none';
+      document.getElementById('facGroup').style.display = u.role === 'factory' ? '' : 'none';
+      document.getElementById('brandGroup').style.display = u.role === 'brand' ? '' : 'none';
+      document.getElementById('fDistributor').value = u.distributor_id || '';
+      document.getElementById('fFactory').value = u.factory_id || '';
+      document.getElementById('fBrand').value = u.brand_id || '';
+      document.getElementById('mask').classList.add('show');
+    }
+    function closeModal() { document.getElementById('mask').classList.remove('show'); }
+
+    document.getElementById('fRole').addEventListener('change', function () {
+      document.getElementById('distGroup').style.display = this.value === 'distributor' ? '' : 'none';
+      document.getElementById('facGroup').style.display = this.value === 'factory' ? '' : 'none';
+      const bg = document.getElementById('brandGroup');
+      if (bg) bg.style.display = this.value === 'brand' ? '' : 'none';
+    });
+
+    async function saveUser() {
+      const role = document.getElementById('fRole').value;
+      const body = {
+        username: document.getElementById('fUsername').value.trim(),
+        display_name: document.getElementById('fDisplay').value.trim(),
+        phone: document.getElementById('fPhone').value.trim(),
+        role: role,
+        distributor_id: document.getElementById('fDistributor').value || null,
+        factory_id: document.getElementById('fFactory').value || null,
+        brand_id: role === 'brand' ? (document.getElementById('fBrand').value || null) : null,
+        password: document.getElementById('fPassword').value
+      };
+      if (role === 'brand' && !body.brand_id) { toast('品牌管理员必须选择归属品牌', 'error'); return; }
+      // 工厂装箱账号：人名 + 手机号 + 工厂 三项必填
+      if (role === 'factory') {
+        if (!body.display_name) { toast('工厂装箱账号必须填写人名', 'error'); return; }
+        if (!/^1\d{10}$/.test(body.phone)) { toast('工厂装箱账号必须填写11位手机号', 'error'); return; }
+        if (!body.factory_id) { toast('工厂装箱账号必须选择绑定工厂', 'error'); return; }
+      }
+      let res, d;
+      if (editingId) {
+        res = await fetch('/api/users/' + editingId, {
+          method: 'PUT', headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ display_name: body.display_name, phone: body.phone, role: body.role, distributor_id: body.distributor_id, factory_id: body.factory_id, brand_id: body.brand_id })
+        });
+      } else {
+        res = await fetch('/api/users', {
+          method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body)
+        });
+      }
+      d = await res.json();
+      if (d.success) { toast(d.msg || '已保存'); setTimeout(() => location.reload(), 600); }
+      else toast(d.msg || '保存失败', 'error');
+    }
+
+    // ===== 邀请码管理 =====
+    async function newFactory() {
+      const name = prompt('新工厂名称：');
+      if (!name || !name.trim()) return;
+      const res = await fetch('/api/factories', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name: name.trim() })
+      });
+      const d = await res.json();
+      if (d.success) {
+        const sel = document.getElementById('fFactory');
+        const opt = document.createElement('option');
+        opt.value = d.id; opt.textContent = name.trim();
+        sel.appendChild(opt); sel.value = d.id;
+        toast('工厂已创建，已自动选中');
+      } else toast(d.msg || '创建失败', 'error');
+    }
+    async function genInvite() {
+      const brandSel = document.getElementById('invBrand');
+      const brandId = brandSel ? (brandSel.value || null) : null;
+      if (brandSel && !brandId) { toast('请先为邀请码选择归属品牌', 'error'); return; }
+      const res = await fetch('/api/invitations', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ role: document.getElementById('invRole').value, note: document.getElementById('invNote').value.trim(), brand_id: brandId })
+      });
+      const d = await res.json();
+      if (d.success) { toast('已生成：' + d.code); setTimeout(() => location.reload(), 500); }
+      else toast(d.msg || '生成失败', 'error');
+    }
+
+    // ===== 品牌管理（平台管理员） =====
+    async function loadBrands() {
+      const body = document.getElementById('brandBody');
+      if (!body) return;
+      try {
+        const res = await fetch('/api/brands');
+        const d = await res.json();
+        if (!d.success) { body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">加载失败</td></tr>'; return; }
+        if (!d.brands.length) { body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">暂无品牌，点击右上角新建</td></tr>'; return; }
+        body.innerHTML = d.brands.map(b => `
+          <tr>
+            <td style="font-weight:600;">${b.name}</td>
+            <td>${b.contact || '-'}</td>
+            <td>${b.product_count}</td>
+            <td>${b.factory_count}</td>
+            <td>${b.distributor_count}</td>
+            <td>${b.user_count}</td>
+            <td>${b.enabled ? '<span class="tag tag-green">启用</span>' : '<span class="tag tag-red">停用</span>'}</td>
+            <td style="font-size:12px;color:#666;">${b.created_at || '-'}</td>
+            <td style="white-space:nowrap;">
+              <button class="btn btn-outline btn-sm" onclick="renameBrand(${b.id}, '${(b.name||'').replace(/'/g, "\\'")}')">改名</button>
+              <button class="btn btn-outline btn-sm" ${b.enabled ? 'style="color:#e65100;"' : ''} onclick="toggleBrand(${b.id}, ${b.enabled ? 0 : 1})">${b.enabled ? '停用' : '启用'}</button>
+            </td>
+          </tr>`).join('');
+      } catch (e) {
+        body.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">加载失败</td></tr>';
+      }
+    }
+    async function createBrand() {
+      const name = document.getElementById('brandName').value.trim();
+      if (!name) { toast('请输入品牌名称', 'error'); return; }
+      const res = await fetch('/api/brands', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name, contact: document.getElementById('brandContact').value.trim() })
+      });
+      const d = await res.json();
+      if (d.success) { toast('品牌已创建，刷新页面即可在账号/邀请码中绑定该品牌'); setTimeout(() => location.reload(), 800); }
+      else toast(d.msg || '创建失败', 'error');
+    }
+    async function renameBrand(id, oldName) {
+      const name = prompt('修改品牌名称：', oldName);
+      if (!name || !name.trim() || name.trim() === oldName) return;
+      const res = await fetch('/api/brands/' + id, {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name: name.trim() })
+      });
+      const d = await res.json();
+      if (d.success) { toast('已改名'); setTimeout(() => location.reload(), 500); }
+      else toast(d.msg || '操作失败', 'error');
+    }
+    async function toggleBrand(id, enabled) {
+      if (!confirm(enabled ? '停用后该品牌所有账号将无法登录（数据保留），确定停用？' : '确定重新启用该品牌？')) return;
+      const res = await fetch('/api/brands/' + id, {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ enabled: !!enabled })
+      });
+      const d = await res.json();
+      if (d.success) { toast('已' + (enabled ? '启用' : '停用')); setTimeout(() => location.reload(), 500); }
+      else toast(d.msg || '操作失败', 'error');
+    }
+    loadBrands();
+    loadFactories();
+
+    // ===== 工厂列表 =====
+    async function loadFactories() {
+      const body = document.getElementById('factoryBody');
+      if (!body) return;
+      try {
+        const res = await fetch('/api/factories');
+        const d = await res.json();
+        if (!d.success) { body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">加载失败</td></tr>'; return; }
+        if (!d.factories.length) { body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">暂无工厂，点击右上角新建</td></tr>'; return; }
+        body.innerHTML = d.factories.map(f => `
+          <tr>
+            <td>${f.id}</td>
+            <td style="font-weight:600;">${esc(f.name)}</td>
+            <td>${esc(f.contact || '-')}</td>
+            <td>${esc(f.brand_name || '-')}</td>
+            <td id="fc-${f.id}">…</td>
+            <td style="font-size:12px;color:#666;">${f.created_at || '-'}</td>
+            <td style="white-space:nowrap;">
+              <button class="btn btn-outline btn-sm" style="color:#ea4335;border-color:#ea4335;" onclick="deleteFactory(${f.id}, '${esc(f.name)}')">删除</button>
+            </td>
+          </tr>`).join('');
+        // 拉账号数
+        d.factories.forEach(f => {
+          fetch('/api/users').then(r => r.json()).then(ud => {
+            if (!ud.success) return;
+            const c = ud.users.filter(u => u.factory_id === f.id).length;
+            const cell = document.getElementById('fc-' + f.id);
+            if (cell) cell.textContent = c;
+          });
+        });
+      } catch (e) {
+        body.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">加载失败</td></tr>';
+      }
+    }
+    function esc(s) { return String(s || '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+    async function addFactory() {
+      const name = prompt('新工厂名称（必填）：');
+      if (!name || !name.trim()) return;
+      const contact = prompt('联系人（选填）：') || '';
+      const res = await fetch('/api/factories', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ name: name.trim(), contact: contact.trim() })
+      });
+      const d = await res.json();
+      if (d.success) { toast('工厂已创建'); loadFactories(); }
+      else toast(d.msg || '创建失败', 'error');
+    }
+    async function deleteFactory(id, name) {
+      if (!confirm('确定要删除工厂「' + name + '」吗？\n\n该工厂下若有账号请先到「账号管理」解绑；删除后相关产品/箱码/子码的工厂引用会自动清空，码本身保留。')) return;
+      const res = await fetch('/api/factories/' + id, { method: 'DELETE' });
+      const d = await res.json();
+      if (d.success) { toast(d.msg || '已删除'); loadFactories(); }
+      else toast(d.msg || '删除失败', 'error');
+    }
+    function copyInvite(code) {
+      const url = location.origin + '/register?code=' + code;
+      if (navigator.clipboard) navigator.clipboard.writeText(url);
+      prompt('注册链接（已尝试复制到剪贴板），发给合作方即可：', url);
+    }
+    async function revokeInvite(id) {
+      if (!confirm('确定作废该邀请码？作废后无法再用于注册。')) return;
+      const res = await fetch('/api/invitations/' + id, { method: 'DELETE' });
+      const d = await res.json();
+      if (d.success) location.reload();
+      else toast(d.msg || '操作失败', 'error');
+    }
+    async function delInvite(id, code, status) {
+      const msg = status === 1
+        ? '该邀请码已被使用（已注册的账号不受影响），确定删除这条记录吗？'
+        : '确定删除邀请码「' + code + '」的记录吗？删除后不可恢复。';
+      if (!confirm(msg)) return;
+      const res = await fetch('/api/invitations/' + id + '?hard=1', { method: 'DELETE' });
+      const d = await res.json();
+      if (d.success) location.reload();
+      else toast(d.msg || '操作失败', 'error');
+    }
+
+    async function resetPwd(id, username) {
+      const pwd = prompt('为账号「' + username + '」设置新密码（至少12位，含字母、数字和特殊字符）：');
+      if (pwd === null) return;
+      if (pwd.length < 6) { toast('密码至少6位', 'error'); return; }
+      const res = await fetch('/api/users/' + id, {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ password: pwd })
+      });
+      const d = await res.json();
+      toast(d.msg || (d.success ? '已重置' : '操作失败'), d.success ? 'success' : 'error');
+    }
+
+    async function toggleUser(id, enabled) {
+      const res = await fetch('/api/users/' + id, {
+        method: 'PUT', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ enabled: !!enabled })
+      });
+      const d = await res.json();
+      if (d.success) location.reload();
+      else toast(d.msg || '操作失败', 'error');
+    }
+
+    async function delUser(id, username) {
+      if (!confirm('确定删除账号「' + username + '」？此操作不可恢复。')) return;
+      const res = await fetch('/api/users/' + id, { method: 'DELETE' });
+      const d = await res.json();
+      if (d.success) location.reload();
+      else toast(d.msg || '删除失败', 'error');
+    }
+  </script>
+</body>
+</html>

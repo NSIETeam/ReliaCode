@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>品牌方发货 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'warehouse' }) %>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-title">扫码发货</div>
+      <p style="color:#666;margin-bottom:16px;font-size:13px;">
+        扫描<b>箱码</b>（整箱发货）或<b>子码</b>（散件发货），选择代理商后确认发货。
+      </p>
+      <div class="scan-box">
+        <div style="font-size:36px;margin-bottom:8px;"><%- icon('box', 'ui-icon-lg') %></div>
+        <div style="display:flex;gap:8px;justify-content:center;max-width:400px;margin:0 auto;">
+          <input type="text" id="boxCode" class="form-control scan-box-input"
+            placeholder="扫描 / 输入箱码或子码" style="flex:1;" autofocus>
+          <button type="button" class="btn btn-outline" onclick="openScanner({title:'扫描箱码或子码', onScanned: scanBoxCode})" style="white-space:nowrap;"><%- icon('camera') %> 手机扫码</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>选择代理商</label>
+        <select id="distSelect" class="form-control">
+          <option value="">请选择代理商</option>
+          <% distributors.forEach(d => { %>
+            <option value="<%= d.id %>"><%= d.name %>（<%= d.region || '未设置区域' %>）</option>
+          <% }); %>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>操作人（自动记录登录账号）</label>
+        <input type="text" class="form-control" value="<%= user ? user.display_name : '' %>" disabled>
+      </div>
+      <button class="btn btn-success" onclick="shipBox()" style="width:100%;">确认发货</button>
+    </div>
+
+    <!-- 发货记录 -->
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>最近发货记录</span>
+        <button class="btn btn-outline btn-sm" onclick="location.href='/api/export/shipments'"><%- icon('download') %> 导出Excel</button>
+      </div>
+      <table class="table" id="shipTable">
+        <thead>
+          <tr>
+            <th>类型</th><th>码值</th><th>产品</th><th>数量</th>
+            <th>代理商</th><th>区域</th><th>操作人</th><th>发货时间</th>
+          </tr>
+        </thead>
+        <tbody id="shipBody">
+          <tr><td colspan="8" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script src="/js/html5-qrcode.min.js"></script>
+  <script src="/js/scanner.js"></script>
+  <script>
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 3000);
+    }
+
+    // 回车自动发货
+    document.getElementById('boxCode').addEventListener('keypress', e => {
+      if (e.key === 'Enter') shipBox();
+    });
+
+    // 手机扫码回调：识别到箱码后填入输入框
+    function scanBoxCode(code) {
+      document.getElementById('boxCode').value = code;
+      toast('已识别箱码：' + code, 'success');
+    }
+
+    async function shipBox() {
+      const box_code = extractCode(document.getElementById('boxCode').value);
+      const distributor_id = document.getElementById('distSelect').value;
+      if (!box_code) return toast('请输入箱码', 'error');
+      if (!distributor_id) return toast('请选择代理商', 'error');
+
+      const res = await fetch('/api/shipments/ship', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({box_code, distributor_id})
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast(data.msg, 'success');
+        document.getElementById('boxCode').value = '';
+        loadShipments();
+      } else {
+        toast(data.msg || '发货失败', 'error');
+      }
+    }
+
+    async function loadShipments() {
+      const res = await fetch('/api/shipments');
+      const data = await res.json();
+      const body = document.getElementById('shipBody');
+      if (!data.success || data.shipments.length === 0) {
+        body.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:20px;">暂无发货记录</td></tr>';
+        return;
+      }
+      body.innerHTML = data.shipments.map(s => `
+        <tr>
+          <td>${s.item_code ? '<span class="tag tag-yellow">散件</span>' : '<span class="tag tag-green">整箱</span>'}</td>
+          <td style="font-family:monospace;font-size:12px;">${s.item_code || s.box_code}</td>
+          <td>${s.product_name || '-'}</td>
+          <td>${s.item_count ? s.item_count + ' 个' : '-'}</td>
+          <td>${s.distributor_name}</td>
+          <td>${s.distributor_region || '-'}</td>
+          <td>${s.operator || '-'}</td>
+          <td style="font-size:12px;color:#666;">${s.shipped_at}</td>
+        </tr>
+      `).join('');
+    }
+
+    loadShipments();
+  </script>
+</body>
+</html>

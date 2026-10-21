@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>业务 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'business' }) %>
+
+  <div class="container">
+    <div class="page-header">
+      <h1>业务</h1>
+      <p>装箱、发货、代理商、码管理</p>
+    </div>
+
+    <div class="menu-list">
+      <a href="/factory" class="menu-item">
+        <span class="mi-icon"><%- icon('box') %></span>
+        <span class="mi-body">
+          <span class="mi-title">工厂装箱</span>
+          <span class="mi-desc">扫箱码并逐个绑定子码</span>
+        </span>
+        <span class="mi-chevron">›</span>
+      </a>
+      <a href="/warehouse" class="menu-item">
+        <span class="mi-icon"><%- icon('truck') %></span>
+        <span class="mi-body">
+          <span class="mi-title">品牌方发货</span>
+          <span class="mi-desc">选代理商 + 扫码发货</span>
+        </span>
+        <span class="mi-chevron">›</span>
+      </a>
+      <a href="/generate" class="menu-item">
+        <span class="mi-icon"><%- icon('tag') %></span>
+        <span class="mi-body">
+          <span class="mi-title">码生成</span>
+          <span class="mi-desc">创建产品、生成箱码子码</span>
+        </span>
+        <span class="mi-chevron">›</span>
+      </a>
+      <a href="/codes" class="menu-item">
+        <span class="mi-icon"><%- icon('search') %></span>
+        <span class="mi-body">
+          <span class="mi-title">码查询</span>
+          <span class="mi-desc">查询箱码 / 子码状态、导出</span>
+        </span>
+        <span class="mi-chevron">›</span>
+      </a>
+      <a href="/distributors" class="menu-item">
+        <span class="mi-icon"><%- icon('handshake') %></span>
+        <span class="mi-body">
+          <span class="mi-title">代理商</span>
+          <span class="mi-desc">管理代理商档案</span>
+        </span>
+        <span class="mi-chevron">›</span>
+      </a>
+    </div>
+  </div>
+</body>
+</html>

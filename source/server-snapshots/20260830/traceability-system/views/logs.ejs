@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>扫码日志 - <%= brand %></title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <%- include('partials/nav', { active: 'logs' }) %>
+
+  <div class="container">
+    <div class="card">
+      <div class="card-title" style="display:flex;justify-content:space-between;align-items:center;">
+        <span>扫码日志（最近200条）</span>
+        <button id="batchBtn" class="btn btn-outline btn-sm" style="display:none;color:#ea4335;border-color:#ea4335;" onclick="batchDelete()"><%- icon('trash') %> 批量删除选中（<span id="selCount">0</span>）</button>
+      </div>
+      <div style="margin-bottom:12px;display:flex;gap:8px;">
+        <button class="btn btn-outline btn-sm" onclick="filterAll()">全部</button>
+        <button class="btn btn-outline btn-sm" onclick="filterDiversion()">仅串货</button>
+        <button class="btn btn-outline btn-sm" onclick="location.href='/api/export/logs'"><%- icon('download') %> 导出Excel</button>
+      </div>
+      <table class="table" id="logTable">
+        <thead>
+          <tr>
+            <th style="width:32px;"><input type="checkbox" id="chkAll" onchange="toggleAll(this)"></th>
+            <th>扫码码</th><th>产品</th><th>代理商</th>
+            <th>指定区域</th><th>扫码区域</th><th>IP</th>
+            <th>状态</th><th>扫码时间</th><th>操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <% if (logs.length === 0) { %>
+          <tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">暂无扫码记录</td></tr>
+          <% } %>
+          <% logs.forEach(l => { %>
+          <tr class="log-row" id="logRow-<%= l.id %>" data-diversion="<%= l.is_diversion %>">
+            <td><input type="checkbox" class="log-chk" value="<%= l.id %>" onchange="updateSelCount()"></td>
+            <td style="font-family:monospace;font-size:12px;"><%= l.item_code %></td>
+            <td><%= l.product_name || '-' %></td>
+            <td><%= l.distributor_name || '-' %></td>
+            <td><%= l.assigned_region || '-' %></td>
+            <td><%= l.scan_location || '-' %></td>
+            <td style="font-size:12px;color:#999;"><%= l.scan_ip || '-' %></td>
+            <td>
+              <% if (l.is_diversion >= 2) { %>
+                <span class="tag tag-red">重度串货</span>
+              <% } else if (l.is_diversion === 1) { %>
+                <span class="tag tag-yellow">轻度串货</span>
+              <% } else { %>
+                <span class="tag tag-green">正常</span>
+              <% } %>
+            </td>
+            <td style="font-size:12px;color:#666;"><%= l.scanned_at %></td>
+            <td><button class="btn btn-outline btn-sm" style="color:#ea4335;border-color:#ea4335;padding:3px 10px;" onclick="delLog(<%= l.id %>, '<%= l.item_code %>')">删除</button></td>
+          </tr>
+          <% }); %>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    function filterAll() {
+      document.querySelectorAll('.log-row').forEach(r => r.style.display = '');
+    }
+    function filterDiversion() {
+      document.querySelectorAll('.log-row').forEach(r => {
+        r.style.display = r.dataset.diversion !== '0' ? '' : 'none';
+      });
+    }
+
+    function toast(msg, type) {
+      const t = document.createElement('div');
+      t.className = 'toast ' + (type || 'success');
+      t.textContent = msg;
+      document.body.appendChild(t);
+      setTimeout(() => t.remove(), 2500);
+    }
+
+    function selectedIds() {
+      return Array.from(document.querySelectorAll('.log-chk:checked')).map(c => parseInt(c.value));
+    }
+    function updateSelCount() {
+      const n = selectedIds().length;
+      document.getElementById('selCount').textContent = n;
+      document.getElementById('batchBtn').style.display = n > 0 ? '' : 'none';
+    }
+    function toggleAll(el) {
+      document.querySelectorAll('.log-chk').forEach(c => { c.checked = el.checked; });
+      updateSelCount();
+    }
+
+    async function delLog(id, code) {
+      if (!confirm(`确定删除这条扫码记录吗？\n码值：${code}\n删除后不可恢复`)) return;
+      const res = await fetch('/api/scan-logs/' + id, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.success) {
+        toast(data.msg || '已删除');
+        const row = document.getElementById('logRow-' + id);
+        if (row) row.remove();
+        updateSelCount();
+      } else toast(data.msg || '删除失败', 'error');
+    }
+
+    async function batchDelete() {
+      const ids = selectedIds();
+      if (!ids.length) return toast('请先勾选要删除的记录', 'error');
+      if (!confirm(`确定删除选中的 ${ids.length} 条扫码记录吗？删除后不可恢复`)) return;
+      const res = await fetch('/api/scan-logs/batch-delete', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ ids })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast(data.msg || '删除成功');
+        setTimeout(() => location.reload(), 600);
+      } else toast(data.msg || '删除失败', 'error');
+    }
+  </script>
+</body>
+</html>

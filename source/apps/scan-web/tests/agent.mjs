@@ -1,0 +1,40 @@
+import assert from "node:assert/strict";
+import { addProduct, initialize, openApp } from "./helpers.mjs";
+
+const {browser,page}=await openApp();
+await initialize(page);
+await addProduct(page,"agent");
+await page.locator("#agent-toggle").click();
+await page.locator("#agent-command").fill("打开产品动向");
+await page.locator("#agent-form").evaluate((form)=>form.requestSubmit());
+assert.equal(await page.locator("#movement").evaluate((node)=>node.classList.contains("active")),true);
+const visiblePages=await page.locator('.nav-link[data-view]:visible').evaluateAll(buttons=>buttons.map(button=>[button.textContent.trim().replace(/\d+$/,''),button.dataset.view]));
+const expectedTitles={dashboard:"运营总览",codes:"产品与批量生码",movement:"产品动向",documents:"业务单据",verify:"扫码验证",receive:"业务扫码",campaigns:"奖励活动",ledger:"奖励账本",risk:"风险处置",recalls:"召回中心"};
+for(const [label,view] of visiblePages){
+  await page.locator("#agent-command").fill(`打开${label}`);
+  await page.locator("#agent-form").evaluate((form)=>form.requestSubmit());
+  assert.equal((await page.locator("#page-title").textContent()).trim(),expectedTitles[view]);
+}
+await page.locator("#agent-command").fill("打开奖励活动");
+await page.locator("#agent-form").evaluate((form)=>form.requestSubmit());
+await page.locator("#agent-command").fill("填写 活动名称=Agent 全页面活动，触发事件=门店收货，每次积分=10，总预算积分=1000，冻结天数=7，开始日期=2026-08-28，结束日期=2026-09-28");
+await page.locator("#agent-form").evaluate((form)=>form.requestSubmit());
+assert.equal(await page.locator('#campaign-form input[name="name"]').inputValue(),"Agent 全页面活动");
+page.once("dialog",(dialog)=>dialog.accept());
+await page.locator("#agent-command").fill("点击 创建并启用活动");
+await page.locator("#agent-form").evaluate((form)=>form.requestSubmit());
+assert.equal(await page.locator(".campaign-card").count(),1);
+await page.locator("#agent-command").fill("打开批量生码");
+await page.locator("#agent-form").evaluate((form)=>form.requestSubmit());
+await page.locator("#agent-command").fill("生成 2 个 SKU-agent 单品码");
+page.once("dialog",(dialog)=>dialog.accept());
+await page.locator("#agent-form").evaluate((form)=>form.requestSubmit());
+const state=await page.evaluate(()=>JSON.parse(localStorage.getItem("reliacode-workspace-v1")));
+assert.equal(Object.keys(state.objects).length,2);
+assert.ok(state.agentRuns.some((run)=>/生码任务已执行/.test(run.result)));
+const labelDownload=page.waitForEvent("download");
+await page.locator("#agent-command").fill("导出最新一批二维码标签");
+await page.locator("#agent-form").evaluate((form)=>form.requestSubmit());
+assert.match((await labelDownload).suggestedFilename(),/^reliacode-labels-.*\.html$/);
+await browser.close();
+console.log("AGENT PASS: all visible pages, generic form operation, confirmed writes and exports");

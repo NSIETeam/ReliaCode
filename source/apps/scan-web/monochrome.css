@@ -1,0 +1,192 @@
+/*
+ * ReliaCode production monochrome theme.
+ * Loaded last so every authenticated, public-verification and authentication
+ * surface shares one white/black visual contract. State is never color-only.
+ */
+:root {
+  color-scheme: light;
+  --brand: #000;
+  --brand-dark: #000;
+  --brand-soft: #fff;
+  --ink: #000;
+  --text: #000;
+  --text-2: #000;
+  --text-3: #000;
+  --line: #000;
+  --line-strong: #000;
+  --surface: #fff;
+  --subtle: #fff;
+  --bg: #fff;
+  --blue: #000;
+  --navy: #fff;
+  --green: #000;
+  --amber: #000;
+  --red: #000;
+  --accent-soft: #fff;
+  --rc-bg: #fff;
+  --rc-surface: #fff;
+  --rc-subtle: #fff;
+  --rc-ink: #000;
+  --rc-text-2: #000;
+  --rc-text-3: #000;
+  --rc-line: #000;
+  --rc-line-strong: #000;
+  --rc-nav: #fff;
+  --rc-nav-active: #000;
+  --rc-brand: #000;
+  --rc-brand-hover: #222;
+  --rc-brand-soft: #fff;
+  --rc-ok: #000;
+  --rc-ok-soft: #fff;
+  --rc-warn: #000;
+  --rc-warn-soft: #fff;
+  --rc-danger: #000;
+  --rc-danger-soft: #fff;
+  --rc-info: #000;
+  --rc-info-soft: #fff;
+}
+
+html, body, .app-shell, main, .onboarding, .agent-messages,
+.agent-context, .scanner, .scan-result, .context-card, .campaign-form,
+.metric-button:hover, .result-success, .result-warning, .result-error,
+.persistence-banner { color: #000; background: #fff; }
+
+body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC", "Microsoft YaHei UI", sans-serif; }
+body * { color: #000; border-color: #000; }
+
+.sidebar,
+body[data-shell="mobile-field"] .sidebar {
+  color: #000;
+  background: #fff;
+  border-right: 1px solid #000;
+}
+.brand, .brand small, .nav-group, .sidebar-note, .nav-link { color: #000; }
+.nav-link { transition: none; }
+.brand-mark, .onboarding-brand > svg, .agent-mark, .user-avatar {
+  color: #fff;
+  background: #000;
+}
+.nav-link:hover { color: #000; background: #f3f3f3; }
+.nav-link.active { color: #000; background: #fff; box-shadow: inset 3px 0 #000; font-weight: 700; }
+.nav-link.active svg { color: #000; }
+.nav-badge { color: #fff; background: #000; border: 1px solid #000; }
+.sidebar-note { border-top-color: #000; }
+
+.topbar { background: #fff; border-bottom-color: #000; }
+.environment-pill, .tag, .green, .amber, .red, .blue,
+.agent-approval-head span, .status-chip {
+  color: #000;
+  background: #fff;
+  border: 1px solid #000;
+}
+.status-dot { background: #000; box-shadow: 0 0 0 3px #ddd; }
+.workspace-switcher, .user-menu, .icon-button, .agent-toggle,
+button.secondary, .purpose-card, .agent-quick-actions button {
+  color: #000;
+  background: #fff;
+  border-color: #000;
+}
+.workspace-switcher:hover, .user-menu:hover, .icon-button:hover,
+.agent-toggle:hover, button.secondary:hover, .purpose-card:hover,
+.agent-quick-actions button:hover {
+  color: #fff;
+  background: #000;
+  border-color: #000;
+}
+button.primary, .agent-send, .auth-tabs button.active {
+  color: #000;
+  background: #fff;
+  border: 1px solid #000;
+}
+button.primary:hover, .agent-send:hover { color: #000; background: #fff; outline: 2px solid #000; outline-offset: 2px; }
+button:disabled { color: #777 !important; background: #eee !important; border-color: #aaa !important; cursor: not-allowed; }
+
+.card, .panel, .metrics, .metric-strip, .movement-summary,
+.campaign-card, .onboarding-card, .camera-card, .user-menu-popover,
+.agent-drawer, .agent-message p, .identity-rule, .scan-context div,
+.purpose-card, .true-empty, .verify-facts, .campaign-facts {
+  color: #000;
+  background: #fff;
+  border-color: #000;
+  box-shadow: none;
+}
+.metric-card, .metric-icon, .activity-icon, .step-n,
+.agent-message > div, .agent-message.user > div, .agent-message.user p,
+.reward-preview, .identity-rule > span, .campaign-facts > div,
+.verify-facts > div, .auth-tabs, .onboarding-step,
+.onboarding-step.is-done, .persistence-actions button {
+  color: #000;
+  background: #fff;
+  border-color: #000;
+}
+.result-success, .result-warning, .result-error { border-left: 4px solid #000; }
+.success-status, .danger-status, .result-status, .amount, .plus,
+.validation-list svg, .true-empty .empty-icon, .section-kicker { color: #000; }
+.auth-card .auth-error { color: #000; }
+
+input, select, textarea, .scan-row input, .large-scan-input input,
+.onboarding-card input, .compact-form input, .compact-form select,
+.field-label input, .field-label select, .agent-form input {
+  color: #000;
+  background: #fff;
+  border-color: #000;
+}
+input:focus, select:focus, textarea:focus, .scan-row input:focus,
+.campaign-form input:focus, .toolbar input:focus, .agent-form input:focus {
+  outline: 2px solid #000;
+  outline-offset: 2px;
+  border-color: #000;
+  box-shadow: none;
+}
+::placeholder { color: #707070; opacity: 1; }
+
+.toast, #persistence-status {
+  color: #fff !important;
+  background: #000 !important;
+  border: 1px solid #000;
+  box-shadow: none !important;
+}
+.agent-backdrop, .camera-modal { background: rgba(255,255,255,.92); }
+.agent-drawer { visibility: hidden; pointer-events: none; }
+.agent-drawer.open { visibility: visible; pointer-events: auto; }
+.agent-pending { color: #000; background: #fff; border-color: #000; }
+.agent-approval-head { color: #000; }
+.camera-viewport { background: #000; border: 1px solid #000; }
+.camera-frame { border-color: #fff; }
+
+svg.ui-icon, svg.nav-svg, svg.brand-logo-svg, button svg,
+.device-summary svg, .agent-context svg { stroke: currentColor; fill: none; }
+
+@media (max-width: 920px) {
+  .sidebar { border-right: 0; border-top: 1px solid #000; background: #fff; }
+}
+@media (max-width: 767px) {
+  .sidebar { border-top: 1px solid #000; }
+  .nav-link.active { color: #000; background: #fff; box-shadow: inset 0 -3px #000; }
+  .nav-link.active::before { background: #000; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; }
+}
+
+@media (forced-colors: active) {
+  button, input, select, textarea, .panel, .card { forced-color-adjust: auto; }
+}
+/* company-design v1: appended so monochrome.css remains the final production contract. */
+:root{--company-ink:#161a17;--company-canvas:#f5f6f3;--company-surface:#fff;--company-line:#d9ded8;--company-muted:#66706a;--product-accent:#2f6b4f;--state-success:#176b4c;--state-warning:#8a6400;--state-danger:#b3261e;--state-info:#315f91}
+*,*::before,*::after{box-sizing:border-box}:focus-visible{outline:2px solid var(--state-info);outline-offset:2px}
+body{background:var(--company-canvas);color:var(--company-ink)}.app-shell{grid-template-columns:232px minmax(0,1fr)}.sidebar{background:var(--company-ink);padding:24px 14px}.brand{padding:0 10px 28px}.brand small{color:#aeb9b1}.brand-mark{background:var(--product-accent);border-radius:8px}nav{gap:3px}.nav-link{border-radius:8px;padding:11px 12px}.nav-link:hover,.nav-link.active{background:#2b332e;color:#fff;box-shadow:inset 3px 0 var(--product-accent)}main{padding:0 32px 40px}.topbar{min-height:64px;border-bottom:1px solid var(--company-line)}.card,.panel{border-color:var(--company-line);border-radius:12px;box-shadow:none;background:var(--company-surface)}button.primary{background:var(--company-ink);border-radius:8px}button.primary:hover{background:#2b332e}button.secondary{border-color:var(--company-line);border-radius:8px}input,select,textarea{border-color:var(--company-line);border-radius:8px;background:var(--company-surface);color:var(--company-ink)}
+@media(max-width:920px){.app-shell{grid-template-columns:minmax(0,1fr)}main{padding:0 16px 25px}}@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:1ms!important;transition-duration:1ms!important}}
+body{background:#fff!important;color:var(--company-ink)}.app-shell{background:var(--company-canvas)}
+.sidebar{background:#fff!important;color:#000!important}.nav-link{color:#000!important}.nav-link:hover,.nav-link.active{background:#fff!important;color:#000!important;box-shadow:inset 3px 0 var(--product-accent)}
+button.primary{background:#000!important;color:#fff!important;border-color:#000!important}
+.company-suite{position:relative;margin:8px 0}.company-suite summary{cursor:pointer;list-style:none;border:1px solid var(--company-line);border-radius:8px;padding:10px 12px;color:var(--company-muted);font-size:12px}.company-suite summary::-webkit-details-marker{display:none}.company-suite-menu{position:absolute;z-index:90;left:10px;bottom:calc(100% + 6px);width:210px;padding:8px;background:var(--company-surface);border:1px solid var(--company-line);border-radius:12px;box-shadow:0 12px 30px #0002;display:grid;gap:2px}.company-suite-menu b{padding:7px;color:var(--company-muted);font-size:11px}.company-suite-menu a,.company-suite-menu button{border:0!important;background:transparent!important;color:var(--company-ink)!important;text-decoration:none;text-align:left;padding:8px;border-radius:6px;cursor:pointer}.company-suite-menu hr{width:100%;border:0;border-top:1px solid var(--company-line)}
+@media(prefers-color-scheme:dark){:root{--company-ink:#edf2ee;--company-canvas:#161b18;--company-surface:#202722;--company-line:#3b463e;--company-muted:#b3beb6;color-scheme:dark}html,body,.onboarding,.app-shell{background:var(--company-canvas)!important;color:var(--company-ink)!important}.sidebar,.card,.panel,.onboarding-card,.camera-card,.user-menu-popover,.agent-drawer,input,select,textarea{background:var(--company-surface)!important;color:var(--company-ink)!important;border-color:var(--company-line)!important}.onboarding-card p,.onboarding-card label,.onboarding-brand small{color:var(--company-muted)!important}}
+@media(prefers-color-scheme:dark){.onboarding-card h1,.onboarding-card h2,.onboarding-card h3,.onboarding-card b,.onboarding-card strong,.onboarding-brand b::after{color:var(--company-ink)!important}.onboarding-brand>svg{color:var(--product-accent)!important}.onboarding-card button.primary,button.primary{background:var(--company-ink)!important;color:var(--company-canvas)!important;border-color:var(--company-ink)!important}}
+@media(max-width:920px){.sidebar{position:fixed;top:auto;bottom:0;left:0;width:100%;height:68px;display:grid;grid-template-columns:repeat(6,1fr);padding:7px;z-index:80}.sidebar .brand,.sidebar-note,.nav-group{display:none!important}#main-nav{display:contents}#main-nav .nav-link{min-width:0;padding:5px 2px;display:flex;flex-direction:column;justify-content:center;font-size:10px}#main-nav .nav-link:nth-of-type(n+6){display:none!important}.company-suite{display:block;margin:0}.company-suite summary{height:52px;display:grid;place-items:center;border:0;font-size:10px}.company-suite-menu{position:fixed;left:auto;right:8px;bottom:72px;width:min(280px,calc(100vw - 16px));max-height:72vh;overflow:auto}.app-shell main{padding-bottom:72px}.onboarding-reopen{bottom:84px;right:12px}}
+.onboarding-brand b{font-size:0}.onboarding-brand b::after{content:'ClawMaster / 穿山甲';font-size:16px}
+:root{--company-ink:#26302a}
+button.primary{background:var(--company-ink)!important;border-color:var(--company-ink)!important}
+@media(prefers-color-scheme:dark){:root{--company-ink:#f7f9f6;--company-canvas:#303833;--company-surface:#3b453e;--company-line:#667269;--company-muted:#cbd3cd}.onboarding,.app-shell{background:var(--company-canvas)!important}}
+.onboarding-brand > svg{background:transparent!important;color:var(--product-accent)!important;border-radius:0!important;padding:0!important}
