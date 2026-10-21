@@ -1,0 +1,102 @@
+<% const registrationMode = typeof mode === 'string' ? mode : 'partner'; %>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <%- include('partials/boot-head') %>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#e2f5ee">
+  <title>穿山甲溯源大师 · 注册</title>
+  <link rel="icon" href="/icons/pangolin-photo-96.png?v=20260920">
+  <link rel="preload" as="image" href="/images/register-woodland/background.webp?v=20260917a">
+  <link rel="stylesheet" href="/css/register-glass.css?v=20260917fit2">
+  <script src="/js/register-glass.js?v=20260917fit2" defer></script>
+</head>
+<body>
+  <%- include('partials/boot-loader') %>
+  <%- include('partials/back-button', { fixed: true }) %>
+  <main class="register-page">
+    <div class="register-shell" data-mode="<%= registrationMode %>">
+      <h1 class="sr-only">注册穿山甲溯源大师账号</h1>
+      <div class="mode-switch" role="tablist" aria-label="注册类型">
+        <button type="button" id="publicModeButton" class="mode-button<%= registrationMode === 'public' ? ' is-active' : '' %>" role="tab" aria-selected="<%= registrationMode === 'public' %>" tabindex="<%= registrationMode === 'public' ? '0' : '-1' %>" aria-controls="publicPanel" data-mode="public">普通用户注册</button>
+        <button type="button" id="partnerModeButton" class="mode-button<%= registrationMode === 'partner' ? ' is-active' : '' %>" role="tab" aria-selected="<%= registrationMode === 'partner' %>" tabindex="<%= registrationMode === 'partner' ? '0' : '-1' %>" aria-controls="partnerPanel" data-mode="partner">合作方注册</button>
+      </div>
+
+      <section id="publicPanel" class="mode-panel<%= registrationMode === 'public' ? '' : ' is-hidden' %>" role="tabpanel" aria-labelledby="publicModeButton">
+        <div id="publicMsg" class="msg error is-hidden" role="status" aria-live="polite" tabindex="-1"></div>
+        <form id="publicForm" novalidate>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="publicUsername">登录账号</label>
+              <div class="glass-field"><input type="text" id="publicUsername" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="254" placeholder="请输入手机号或邮箱" required></div>
+            </div>
+            <div class="form-group">
+              <label for="publicDisplayName">姓名或昵称</label>
+              <div class="glass-field"><input type="text" id="publicDisplayName" name="display_name" autocomplete="name" maxlength="40" placeholder="用于个人工作台显示" required></div>
+            </div>
+            <div class="form-group">
+              <label for="publicPassword">密码</label>
+              <div class="glass-field"><input type="password" id="publicPassword" name="password" autocomplete="new-password" minlength="12" placeholder="请设置登录密码" aria-describedby="passwordPolicy" required></div>
+            </div>
+            <div class="form-group">
+              <label for="publicPassword2">确认密码</label>
+              <div class="glass-field"><input type="password" id="publicPassword2" name="password_confirm" autocomplete="new-password" placeholder="再次输入密码" required></div>
+            </div>
+          </div>
+          <button type="submit" class="glass-button btn-register" id="publicRegisterButton">创建普通用户账号</button>
+        </form>
+      </section>
+
+      <section id="partnerPanel" class="mode-panel<%= registrationMode === 'partner' ? '' : ' is-hidden' %>" role="tabpanel" aria-labelledby="partnerModeButton">
+        <div id="partnerMsg" class="msg error is-hidden" role="status" aria-live="polite" tabindex="-1"></div>
+        <form id="inviteForm" class="invite-form" novalidate>
+          <label class="sr-only" for="fCode">邀请码</label>
+          <div class="glass-field invite-field"><input type="text" id="fCode" name="code" value="<%= code %>" placeholder="请输入总部发放的邀请码" autocomplete="off" autocapitalize="characters" spellcheck="false" class="uppercase-input" required></div>
+          <button type="submit" class="glass-button btn-check" id="checkCodeBtn">验证邀请码</button>
+        </form>
+        <div id="roleBanner" class="role-banner" role="status"></div>
+        <form id="partnerForm" class="is-hidden" novalidate>
+          <div class="form-grid">
+            <div class="form-group">
+              <label for="fUsername">登录账号</label>
+              <div class="glass-field"><input type="text" id="fUsername" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="20" placeholder="3-20位字母、数字或下划线" required></div>
+            </div>
+            <div class="form-group">
+              <label for="fPassword">密码</label>
+              <div class="glass-field"><input type="password" id="fPassword" name="password" autocomplete="new-password" minlength="12" placeholder="请设置登录密码" aria-describedby="passwordPolicy" required></div>
+            </div>
+            <div class="form-group">
+              <label for="fPassword2">确认密码</label>
+              <div class="glass-field"><input type="password" id="fPassword2" name="password_confirm" autocomplete="new-password" placeholder="再次输入密码" required></div>
+            </div>
+            <div class="form-group">
+              <label id="companyLabel" for="fCompany">公司/工厂名称</label>
+              <div class="glass-field"><input type="text" id="fCompany" name="company" autocomplete="organization" required></div>
+            </div>
+            <div class="is-hidden" id="regionGroup">
+              <div class="form-grid">
+                <div class="form-group"><label for="fCountry">国家</label><div class="glass-field"><select id="fCountry" name="country"><option value="中国">中国</option></select></div></div>
+                <div class="form-group"><label for="fProvince">省/自治区/特别行政区</label><div class="glass-field"><select id="fProvince" name="province"><option value="">请选择省级地区</option></select></div></div>
+                <div class="form-group"><label for="fCity">市/州/地区</label><div class="glass-field"><select id="fCity" name="city" disabled><option value="">请先选择省级地区</option></select></div></div>
+              </div>
+            </div>
+            <div class="form-group">
+              <label id="contactLabel" for="fContact">联系人/电话（选填）</label>
+              <div class="glass-field"><input type="text" id="fContact" name="contact" placeholder="选填"></div>
+            </div>
+            <div class="form-group" id="phoneGroup">
+              <label for="fPhone">手机号（<span id="phoneReq">工厂注册必填</span>）</label>
+              <div class="glass-field"><input type="tel" id="fPhone" name="phone" autocomplete="tel" inputmode="numeric" placeholder="11位手机号" maxlength="11"></div>
+            </div>
+          </div>
+          <button type="submit" class="glass-button btn-register" id="partnerRegisterButton">创建合作方账号</button>
+        </form>
+      </section>
+      <div class="back"><a href="/login"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19 12H5m7-7-7 7 7 7"/></svg><span>返回登录</span></a></div>
+      <p id="passwordPolicy" class="sr-only">密码至少12位，包含大小写字母、数字和符号。</p>
+    </div>
+  </main>
+</body>
+</html>

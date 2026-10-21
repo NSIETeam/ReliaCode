@@ -1,0 +1,138 @@
+name: reliacode-production
+
+x-api-environment: &api_environment
+  NODE_ENV: production
+  DATABASE_URL_FILE: /run/secrets/database_url
+  DATABASE_SSL: ${DATABASE_SSL:-false}
+  AUTH_MODE: ${AUTH_MODE:-local}
+  ALLOW_PUBLIC_REGISTRATION: "false"
+  ENABLE_LEGACY_SYNC_CODE_GENERATION: "false"
+  REQUIRE_DEVICE_AUTHORIZATION: "true"
+  ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:-}
+  OIDC_ISSUER_URL: ${OIDC_ISSUER_URL:-}
+  OIDC_AUDIENCE: ${OIDC_AUDIENCE:-reliacode-api}
+  CORS_ORIGINS: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
+  TRUST_PROXY: "true"
+  OPEN_EPCIS_BASE_URL: ${OPEN_EPCIS_BASE_URL:?OPEN_EPCIS_BASE_URL is required}
+  OPEN_EPCIS_BEARER_TOKEN_FILE: /run/secrets/openepcis_bearer_token
+  GS1_DIGITAL_LINK_BASE_URL: ${GS1_DIGITAL_LINK_BASE_URL:?GS1_DIGITAL_LINK_BASE_URL is required}
+  WEBAUTHN_RP_NAME: ${WEBAUTHN_RP_NAME:-ReliaCode}
+  WEBAUTHN_RP_ID: ${WEBAUTHN_RP_ID:?WEBAUTHN_RP_ID is required}
+  WEBAUTHN_ORIGIN: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
+  METRICS_BEARER_TOKEN: ${METRICS_BEARER_TOKEN:?METRICS_BEARER_TOKEN is required}
+  WEBHOOK_ENCRYPTION_KEY: ${WEBHOOK_ENCRYPTION_KEY:?WEBHOOK_ENCRYPTION_KEY is required}
+  SESSION_ROTATION_MINUTES: ${SESSION_ROTATION_MINUTES:-15}
+  PASSKEY_STEP_UP_MINUTES: ${PASSKEY_STEP_UP_MINUTES:-10}
+  SESSION_FINGERPRINT_KEY: ${SESSION_FINGERPRINT_KEY:?SESSION_FINGERPRINT_KEY is required}
+  SMTP_URL_FILE: /run/secrets/smtp_url
+  EMAIL_FROM: ${EMAIL_FROM:?EMAIL_FROM is required}
+  ACCOUNT_RECOVERY_BASE_URL: ${PUBLIC_ORIGIN:?PUBLIC_ORIGIN is required}
+  OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:?OBJECT_STORAGE_ENDPOINT is required}
+  OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:-auto}
+  OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:?OBJECT_STORAGE_BUCKET is required}
+  OBJECT_STORAGE_ACCESS_KEY_ID_FILE: /run/secrets/object_storage_access_key_id
+  OBJECT_STORAGE_SECRET_ACCESS_KEY_FILE: /run/secrets/object_storage_secret_access_key
+  OBJECT_STORAGE_FORCE_PATH_STYLE: ${OBJECT_STORAGE_FORCE_PATH_STYLE:-false}
+
+x-api-secrets: &api_secrets [database_url, openepcis_bearer_token, object_storage_access_key_id, object_storage_secret_access_key, smtp_url]
+
+services:
+  migrate:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    command: ["src/migrate.mjs"]
+    environment:
+      <<: *api_environment
+      MIGRATION_DATABASE_URL_FILE: /run/secrets/migration_database_url
+    secrets: [database_url, migration_database_url, openepcis_bearer_token, object_storage_access_key_id, object_storage_secret_access_key, smtp_url]
+    restart: "no"
+
+  api:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    environment:
+      <<: *api_environment
+      DB_POOL_MAX: ${DB_POOL_MAX:-8}
+    secrets: *api_secrets
+    ports: ["4180:4180"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    healthcheck:
+      test: ["CMD", "/nodejs/bin/node", "src/healthcheck.mjs"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+  outbox-worker:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    command: ["src/outbox-worker.mjs"]
+    environment:
+      <<: *api_environment
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}
+    secrets: *api_secrets
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  code-worker:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    command: ["src/code-job-worker.mjs"]
+    environment:
+      <<: *api_environment
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}
+    secrets: *api_secrets
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  webhook-worker:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    command: ["src/webhook-worker.mjs"]
+    environment:
+      <<: *api_environment
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}
+    secrets: *api_secrets
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  code-export-worker:
+    image: ${RELIACODE_API_IMAGE:-ghcr.io/nsieteam/reliacode-api:latest}
+    command: ["src/code-export-worker.mjs"]
+    environment:
+      <<: *api_environment
+      DB_POOL_MAX: ${WORKER_DB_POOL_MAX:-2}
+    secrets: *api_secrets
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+    restart: unless-stopped
+
+  web:
+    image: ${RELIACODE_WEB_IMAGE:-ghcr.io/nsieteam/reliacode-web:latest}
+    environment:
+      NODE_ENV: production
+      RELIACODE_API_URL: http://api:4180
+    ports: ["${WEB_PORT:-4173}:4173"]
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4173/health/live').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+secrets:
+  database_url:
+    file: ./secrets/database_url.txt
+  migration_database_url:
+    file: ./secrets/migration_database_url.txt
+  openepcis_bearer_token:
+    file: ./secrets/openepcis_bearer_token.txt
+  object_storage_access_key_id:
+    file: ./secrets/object_storage_access_key_id.txt
+  object_storage_secret_access_key:
+    file: ./secrets/object_storage_secret_access_key.txt
+  smtp_url:
+    file: ./secrets/smtp_url.txt

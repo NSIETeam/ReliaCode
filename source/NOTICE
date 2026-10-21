@@ -1,0 +1,5 @@
+ReliaCode
+Copyright 2026 NSIETeam contributors
+
+ReliaCode integrates with OpenEPCIS through documented interfaces. No
+OpenEPCIS source code is included in this repository at initial commit.

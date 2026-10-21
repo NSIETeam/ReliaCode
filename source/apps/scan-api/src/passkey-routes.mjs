@@ -1,0 +1,140 @@
+import { generateAuthenticationOptions, generateRegistrationOptions, verifyAuthenticationResponse, verifyRegistrationResponse } from "@simplewebauthn/server";
+import { randomBytes } from "node:crypto";
+import { z } from "zod";
+import { hashToken } from "./auth.mjs";
+import { createLocalSession,sessionCookies } from "./session-security.mjs";
+import { ADMIN_PASSKEY_ROLES,requireFreshPasskeyVerification } from "./passkey-policy.mjs";
+import { parseIdempotencyKey } from "./schemas.mjs";
+import { getIdempotentResponse,lockIdempotencyKey,requestHash,saveIdempotentResponse } from "./idempotency.mjs";
+
+function normalized(value){return String(value).trim().toLowerCase();}
+function webauthnConfig(config){
+  const origin=config.WEBAUTHN_ORIGIN || config.corsOrigins[0];
+  if(!origin)throw Object.assign(new Error("WebAuthn origin is not configured"),{statusCode:503,code:"PASSKEY_NOT_CONFIGURED"});
+  return {origin,rpID:config.WEBAUTHN_RP_ID || new URL(origin).hostname,rpName:config.WEBAUTHN_RP_NAME};
+}
+async function storeChallenge(db,{challenge,userId,purpose}){await db.query("DELETE FROM webauthn_challenges WHERE expires_at<=now() OR used_at IS NOT NULL");await db.query("INSERT INTO webauthn_challenges(challenge_hash,user_id,purpose,expires_at) VALUES($1,$2,$3,now()+interval '5 minutes')",[hashToken(challenge),userId,purpose]);}
+async function consumeChallenge(client,challenge,purpose){const result=await client.query("UPDATE webauthn_challenges SET used_at=now() WHERE challenge_hash=$1 AND purpose=$2 AND used_at IS NULL AND expires_at>now() RETURNING user_id",[hashToken(challenge),purpose]);if(!result.rowCount){const e=new Error("Passkey challenge is invalid or expired");e.statusCode=400;e.code="PASSKEY_CHALLENGE_INVALID";throw e;}return result.rows[0];}
+
+export async function revokePasskey(client,{id,userId,tenantId,organizationId,role,requestId,idempotencyKey}){
+  const credentials=await client.query("SELECT id FROM webauthn_credentials WHERE user_id=$1 ORDER BY id FOR UPDATE",[userId]);
+  if(!credentials.rows.some(row=>row.id===id))return false;
+  const minimum=ADMIN_PASSKEY_ROLES.has(role)?2:1;
+  if(credentials.rowCount<=minimum)throw Object.assign(new Error(`At least ${minimum} Passkey${minimum===1?'':'s'} must remain registered`),{statusCode:409,code:"PASSKEY_MINIMUM_REQUIRED"});
+  await client.query("DELETE FROM webauthn_credentials WHERE id=$1 AND user_id=$2",[id,userId]);
+  await client.query(`INSERT INTO audit_log(tenant_id,actor_id,actor_role,organization_id,action,entity_type,entity_id,request_id,after_state)
+    VALUES($1,$2,$3,$4,'PASSKEY_REVOKED','WEBAUTHN_CREDENTIAL',$5,$6,$7)`,[tenantId,userId,role,organizationId,id,requestId,{reason:"User revoked Passkey",idempotencyKey,remaining:credentials.rowCount-1}]);
+  return true;
+}
+
+export async function issueRecoveryCodes(client,{userId,tenantId,organizationId,role,requestId,idempotencyKey,reason}){
+  const digest=requestHash("RECOVERY_CODES_ROTATE",{reason});
+  await client.query("SELECT pg_advisory_xact_lock(hashtext($1))",[`recovery-codes:${tenantId}:${userId}:${idempotencyKey}`]);
+  const existing=await client.query("SELECT request_hash FROM recovery_code_issuances WHERE tenant_id=$1 AND user_id=$2 AND idempotency_key=$3",[tenantId,userId,idempotencyKey]);
+  if(existing.rowCount){
+    if(existing.rows[0].request_hash!==digest)throw Object.assign(new Error("Idempotency key was already used with a different request"),{statusCode:409,code:"IDEMPOTENCY_CONFLICT"});
+    return{duplicate:true,codes:[]};
+  }
+  const codes=Array.from({length:10},()=>randomBytes(9).toString("base64url").toUpperCase());
+  await client.query("DELETE FROM account_recovery_codes WHERE user_id=$1",[userId]);
+  for(const code of codes)await client.query("INSERT INTO account_recovery_codes(user_id,code_hash) VALUES($1,$2)",[userId,hashToken(code)]);
+  await client.query("INSERT INTO recovery_code_issuances(tenant_id,user_id,idempotency_key,request_hash) VALUES($1,$2,$3,$4)",[tenantId,userId,idempotencyKey,digest]);
+  await client.query(`INSERT INTO audit_log(tenant_id,actor_id,actor_role,organization_id,action,entity_type,entity_id,request_id,after_state) VALUES($1,$2,$3,$4,'RECOVERY_CODES_ROTATED','LOCAL_USER',$2,$5,$6)`,[tenantId,userId,role,organizationId,requestId,{reason,count:codes.length,idempotencyKey}]);
+  return{duplicate:false,codes};
+}
+
+export async function revokeSession(client,{sessionId,userId,tenantId,reason="User revoked session"}){
+  const result=await client.query("UPDATE admin_sessions SET revoked_at=now(),revoked_by=$1,revocation_reason=$4 WHERE id=$2 AND user_id=$1 AND tenant_id=$3 AND revoked_at IS NULL RETURNING id",[userId,sessionId,tenantId,reason]);
+  if(result.rowCount){await client.query(`INSERT INTO authentication_events(tenant_id,user_id,event_type,risk_level,actor_id,reason,metadata) VALUES($1,$2,'SESSION_REVOKED','LOW',$2,$3,$4)`,[tenantId,userId,reason,{sessionId}]);return true;}
+  const existing=await client.query("SELECT 1 FROM admin_sessions WHERE id=$1 AND user_id=$2 AND tenant_id=$3",[sessionId,userId,tenantId]);
+  return Boolean(existing.rowCount);
+}
+
+export async function revokeOtherSessions(client,{userId,tenantId,currentTokenHash,reason}){
+  const changed=await client.query("UPDATE admin_sessions SET revoked_at=now(),revoked_by=$1,revocation_reason=$4 WHERE user_id=$1 AND tenant_id=$2 AND token_hash<>$3 AND revoked_at IS NULL",[userId,tenantId,currentTokenHash,reason]);
+  if(changed.rowCount)await client.query(`INSERT INTO authentication_events(tenant_id,user_id,event_type,risk_level,actor_id,reason,metadata) VALUES($1,$2,'SESSION_REVOKED','LOW',$2,$3,$4)`,[tenantId,userId,reason,{count:changed.rowCount,scope:"OTHER_SESSIONS"}]);
+  return changed.rowCount;
+}
+
+export function registerPasskeyRoutes(app,{db,config}){
+  app.get("/api/auth/passkeys",async(request)=>{const result=await db.query("SELECT id,name,transports,device_type,backed_up,last_used_at,created_at FROM webauthn_credentials WHERE user_id=$1 ORDER BY created_at DESC",[request.principal.id]);return{items:result.rows};});
+  app.post("/api/auth/passkeys/registration/options",async(request)=>{
+    if(config.AUTH_MODE!=="local")throw Object.assign(new Error("Route not found"),{statusCode:404,code:"NOT_FOUND"});
+    const user=await db.query("SELECT id,username FROM local_users WHERE id=$1 AND status='ACTIVE'",[request.principal.id]);if(!user.rowCount)throw Object.assign(new Error("User not found"),{statusCode:404,code:"NOT_FOUND"});
+    const credentials=await db.query("SELECT id,transports FROM webauthn_credentials WHERE user_id=$1",[request.principal.id]);
+    const wc=webauthnConfig(config);
+    const options=await generateRegistrationOptions({rpName:wc.rpName,rpID:wc.rpID,userName:user.rows[0].username,userID:new TextEncoder().encode(user.rows[0].id),attestationType:"none",excludeCredentials:credentials.rows.map(row=>({id:row.id,transports:row.transports})),authenticatorSelection:{residentKey:"required",userVerification:"required"}});
+    await storeChallenge(db,{challenge:options.challenge,userId:request.principal.id,purpose:"REGISTRATION"});return options;
+  });
+  app.post("/api/auth/passkeys/registration/verify",async(request,reply)=>{
+    const body=z.object({challenge:z.string().min(20),name:z.string().trim().min(1).max(80).default("Passkey"),response:z.record(z.string(),z.unknown())}).parse(request.body);const wc=webauthnConfig(config);
+    const result=await db.transaction(async(client)=>{const challenge=await consumeChallenge(client,body.challenge,"REGISTRATION");if(String(challenge.user_id)!==request.principal.id)throw Object.assign(new Error("Passkey challenge belongs to another user"),{statusCode:404,code:"NOT_FOUND"});const verification=await verifyRegistrationResponse({response:body.response,expectedChallenge:body.challenge,expectedOrigin:wc.origin,expectedRPID:wc.rpID,requireUserVerification:true});if(!verification.verified||!verification.registrationInfo)throw Object.assign(new Error("Passkey registration could not be verified"),{statusCode:400,code:"PASSKEY_VERIFICATION_FAILED"});const info=verification.registrationInfo;await client.query(`INSERT INTO webauthn_credentials(id,user_id,public_key,counter,transports,device_type,backed_up,name) VALUES($1,$2,$3,$4,$5,$6,$7,$8)`,[info.credential.id,request.principal.id,Buffer.from(info.credential.publicKey),info.credential.counter,info.credential.transports||[],info.credentialDeviceType,info.credentialBackedUp,body.name]);return{id:info.credential.id,name:body.name};});return reply.code(201).send({verified:true,credential:result});
+  });
+  app.post("/api/auth/passkeys/authentication/options",{config:{rateLimit:{max:20,timeWindow:"5 minutes"}}},async(request)=>{
+    const body=z.object({username:z.string().trim().min(1).max(254)}).parse(request.body);const found=await db.query("SELECT id FROM local_users WHERE (normalized_username=$1 OR normalized_email=$1) AND status='ACTIVE'",[normalized(body.username)]);const user=found.rows[0];const credentials=user?await db.query("SELECT id,transports FROM webauthn_credentials WHERE user_id=$1",[user.id]):{rows:[]};const wc=webauthnConfig(config);const options=await generateAuthenticationOptions({rpID:wc.rpID,userVerification:"required",allowCredentials:credentials.rows.map(row=>({id:row.id,transports:row.transports}))});await storeChallenge(db,{challenge:options.challenge,userId:user?.id||null,purpose:"AUTHENTICATION"});return options;
+  });
+  app.post("/api/auth/passkeys/authentication/verify",{config:{rateLimit:{max:20,timeWindow:"5 minutes"}}},async(request,reply)=>{
+    const body=z.object({challenge:z.string().min(20),response:z.record(z.string(),z.unknown())}).parse(request.body);const wc=webauthnConfig(config);
+    const authenticated=await db.transaction(async(client)=>{const challenge=await consumeChallenge(client,body.challenge,"AUTHENTICATION");if(!challenge.user_id)throw Object.assign(new Error("Passkey authentication failed"),{statusCode:401,code:"INVALID_CREDENTIALS"});const credential=await client.query(`SELECT c.*,u.status user_status,u.tenant_id FROM webauthn_credentials c JOIN local_users u ON u.id=c.user_id WHERE c.id=$1 AND c.user_id=$2`,[body.response.id,challenge.user_id]);if(!credential.rowCount||credential.rows[0].user_status!=="ACTIVE")throw Object.assign(new Error("Passkey authentication failed"),{statusCode:401,code:"INVALID_CREDENTIALS"});const row=credential.rows[0];const verification=await verifyAuthenticationResponse({response:body.response,expectedChallenge:body.challenge,expectedOrigin:wc.origin,expectedRPID:wc.rpID,credential:{id:row.id,publicKey:new Uint8Array(row.public_key),counter:Number(row.counter),transports:row.transports},requireUserVerification:true});if(!verification.verified)throw Object.assign(new Error("Passkey authentication failed"),{statusCode:401,code:"INVALID_CREDENTIALS"});await client.query("UPDATE webauthn_credentials SET counter=$1,last_used_at=now() WHERE id=$2",[verification.authenticationInfo.newCounter,row.id]);return{userId:row.user_id,tenantId:row.tenant_id};});const created=await createLocalSession(db,config,{...authenticated,request,authMethod:"PASSKEY"});reply.header("set-cookie",sessionCookies(config,created.token,created.csrf));return{authenticated:true,csrfToken:created.csrf,riskLevel:created.riskLevel};
+  });
+  app.post("/api/auth/passkeys/step-up/options",{config:{rateLimit:{max:20,timeWindow:"5 minutes"}}},async(request)=>{
+    if(config.AUTH_MODE!=="local")throw Object.assign(new Error("Route not found"),{statusCode:404,code:"NOT_FOUND"});
+    const credentials=await db.query("SELECT id,transports FROM webauthn_credentials WHERE user_id=$1",[request.principal.id]);
+    if(!credentials.rowCount)throw Object.assign(new Error("Passkey is required"),{statusCode:428,code:"PASSKEY_REQUIRED"});
+    const wc=webauthnConfig(config),options=await generateAuthenticationOptions({rpID:wc.rpID,userVerification:"required",allowCredentials:credentials.rows.map(row=>({id:row.id,transports:row.transports}))});
+    await storeChallenge(db,{challenge:options.challenge,userId:request.principal.id,purpose:"STEP_UP"});
+    return options;
+  });
+  app.post("/api/auth/passkeys/step-up/verify",{config:{rateLimit:{max:20,timeWindow:"5 minutes"}}},async(request)=>{
+    if(config.AUTH_MODE!=="local")throw Object.assign(new Error("Route not found"),{statusCode:404,code:"NOT_FOUND"});
+    const body=z.object({challenge:z.string().min(20),response:z.record(z.string(),z.unknown())}).parse(request.body),wc=webauthnConfig(config);
+    const verifiedAt=await db.transaction(async client=>{
+      const challenge=await consumeChallenge(client,body.challenge,"STEP_UP");
+      if(String(challenge.user_id)!==request.principal.id)throw Object.assign(new Error("Passkey challenge belongs to another user"),{statusCode:404,code:"NOT_FOUND"});
+      const credential=await client.query("SELECT id,public_key,counter,transports FROM webauthn_credentials WHERE id=$1 AND user_id=$2",[body.response.id,request.principal.id]);
+      if(!credential.rowCount)throw Object.assign(new Error("Passkey verification failed"),{statusCode:401,code:"INVALID_CREDENTIALS"});
+      const row=credential.rows[0],verification=await verifyAuthenticationResponse({response:body.response,expectedChallenge:body.challenge,expectedOrigin:wc.origin,expectedRPID:wc.rpID,credential:{id:row.id,publicKey:new Uint8Array(row.public_key),counter:Number(row.counter),transports:row.transports},requireUserVerification:true});
+      if(!verification.verified)throw Object.assign(new Error("Passkey verification failed"),{statusCode:401,code:"INVALID_CREDENTIALS"});
+      await client.query("UPDATE webauthn_credentials SET counter=$1,last_used_at=now() WHERE id=$2",[verification.authenticationInfo.newCounter,row.id]);
+      const updated=await client.query("UPDATE admin_sessions SET passkey_verified_at=now() WHERE token_hash=$1 AND user_id=$2 AND revoked_at IS NULL RETURNING passkey_verified_at",[request.authSession.token_hash,request.principal.id]);
+      if(!updated.rowCount)throw Object.assign(new Error("Session is no longer active"),{statusCode:401,code:"UNAUTHORIZED"});
+      return updated.rows[0].passkey_verified_at;
+    });
+    request.authSession.passkey_verified_at=verifiedAt;
+    return{verified:true,verifiedAt,expiresAt:new Date(new Date(verifiedAt).getTime()+config.PASSKEY_STEP_UP_MINUTES*60_000).toISOString()};
+  });
+  app.delete("/api/auth/passkeys/:id",async(request,reply)=>{
+    if(config.AUTH_MODE!=="local")throw Object.assign(new Error("Route not found"),{statusCode:404,code:"NOT_FOUND"});
+    requireFreshPasskeyVerification(request,config);
+    const id=z.string().min(16).max(1024).parse(request.params.id),idempotencyKey=parseIdempotencyKey(request);
+    await db.transaction(async client=>{
+      const operation="PASSKEY_REVOKE",digest=requestHash(operation,{id});
+      await lockIdempotencyKey(client,request.principal.tenantId,idempotencyKey);
+      const cached=await getIdempotentResponse(client,request.principal.tenantId,idempotencyKey,digest);
+      if(cached)return;
+      const revoked=await revokePasskey(client,{id,userId:request.principal.id,tenantId:request.principal.tenantId,organizationId:request.principal.organizationId,role:request.principal.role,requestId:request.id,idempotencyKey});
+      await saveIdempotentResponse(client,{tenantId:request.principal.tenantId,key:idempotencyKey,operation,hash:digest,status:204,body:{revoked}});
+    });
+    return reply.code(204).send();
+  });
+  app.post("/api/auth/recovery-codes",async(request,reply)=>{
+    if(ADMIN_PASSKEY_ROLES.has(request.principal.role)){
+      const passkeys=await db.query("SELECT count(*)::int count FROM webauthn_credentials WHERE user_id=$1",[request.principal.id]);
+      if(Number(passkeys.rows[0]?.count||0)<2)throw Object.assign(new Error("Administrators must register at least two Passkeys before rotating recovery codes"),{statusCode:428,code:"ADMIN_PASSKEYS_REQUIRED"});
+      requireFreshPasskeyVerification(request,config);
+    }
+    const body=z.object({reason:z.string().trim().min(3).max(500)}).parse(request.body),idempotencyKey=parseIdempotencyKey(request);
+    const result=await db.transaction(client=>issueRecoveryCodes(client,{userId:request.principal.id,tenantId:request.principal.tenantId,organizationId:request.principal.organizationId,role:request.principal.role,requestId:request.id,idempotencyKey,reason:body.reason}));
+    if(result.duplicate)return reply.code(409).send({code:"RECOVERY_CODES_ALREADY_ISSUED",message:"Recovery codes were already issued for this idempotency key and cannot be displayed again"});
+    return reply.code(201).send({codes:result.codes});
+  });
+  app.post("/api/auth/recovery-codes/consume",{config:{rateLimit:{max:10,timeWindow:"15 minutes"}}},async(request,reply)=>{if(config.AUTH_MODE!=="local")return reply.code(404).send({code:"NOT_FOUND",message:"Route not found"});const body=z.object({username:z.string().trim().min(1).max(254),code:z.string().trim().min(8).max(80)}).parse(request.body);const consumed=await db.query(`WITH matched AS (
+      SELECT c.id,c.user_id FROM account_recovery_codes c JOIN local_users u ON u.id=c.user_id
+      JOIN tenants t ON t.id=u.tenant_id WHERE c.code_hash=$1 AND c.used_at IS NULL AND u.status='ACTIVE' AND t.status='ACTIVE'
+        AND (u.normalized_username=$2 OR u.normalized_email=$2) FOR UPDATE OF c
+    ) UPDATE account_recovery_codes c SET used_at=now() FROM matched m WHERE c.id=m.id RETURNING m.user_id,(SELECT tenant_id FROM local_users WHERE id=m.user_id) tenant_id`,[hashToken(body.code),normalized(body.username)]);if(!consumed.rowCount)return reply.code(401).send({code:"INVALID_CREDENTIALS",message:"Recovery code is invalid"});const created=await createLocalSession(db,config,{userId:consumed.rows[0].user_id,tenantId:consumed.rows[0].tenant_id,request,authMethod:"RECOVERY_CODE"});reply.header("set-cookie",sessionCookies(config,created.token,created.csrf));return{authenticated:true,csrfToken:created.csrf,riskLevel:created.riskLevel,recoveryCodeConsumed:true};});
+  app.get("/api/auth/sessions",async(request)=>{const result=await db.query(`SELECT id,auth_method,user_agent,risk_level,created_at,last_seen_at,expires_at,revoked_at,revocation_reason,
+    (token_hash=$2) current FROM admin_sessions WHERE user_id=$1 AND created_at>now()-interval '90 days' ORDER BY last_seen_at DESC`,[request.principal.id,request.authSession.token_hash]);return{items:result.rows};});
+  app.delete("/api/auth/sessions/:id",async(request,reply)=>{const id=z.string().uuid().parse(request.params.id),key=parseIdempotencyKey(request),operation="SESSION_REVOKE",digest=requestHash(operation,{id});await db.transaction(async client=>{await lockIdempotencyKey(client,request.principal.tenantId,key);const cached=await getIdempotentResponse(client,request.principal.tenantId,key,digest);if(cached)return;const revoked=await revokeSession(client,{sessionId:id,userId:request.principal.id,tenantId:request.principal.tenantId});await saveIdempotentResponse(client,{tenantId:request.principal.tenantId,key,operation,hash:digest,status:204,body:{revoked}});});return reply.code(204).send();});
+  app.post("/api/auth/sessions/revoke-others",async(request)=>{const body=z.object({reason:z.string().trim().min(3).max(500).default("User revoked all other sessions")}).parse(request.body||{}),key=parseIdempotencyKey(request),operation="SESSIONS_REVOKE_OTHERS",digest=requestHash(operation,body);return db.transaction(async client=>{await lockIdempotencyKey(client,request.principal.tenantId,key);const cached=await getIdempotentResponse(client,request.principal.tenantId,key,digest);if(cached)return cached.body;const revoked=await revokeOtherSessions(client,{userId:request.principal.id,tenantId:request.principal.tenantId,currentTokenHash:request.authSession.token_hash,reason:body.reason});const response={revoked};await saveIdempotentResponse(client,{tenantId:request.principal.tenantId,key,operation,hash:digest,status:200,body:response});return response;});});
+}

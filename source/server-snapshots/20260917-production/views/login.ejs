@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <%- include('partials/boot-head') %>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#f1faf6">
+  <title>穿山甲溯源大师 · 企业登录</title>
+  <link rel="icon" href="/icons/pangolin-photo-96.png?v=20260920">
+  <link rel="stylesheet" href="/css/login-woodland.css?v=20260917seams">
+  <link rel="preload" href="/images/login-woodland/reference.webp?v=20260920-opt" as="image">
+  <script src="/js/login-woodland.js?v=20260916r4" defer></script>
+</head>
+<body>
+  <%- include('partials/boot-loader') %>
+  <%- include('partials/back-button', { fixed: true }) %>
+  <main class="login-page">
+    <div class="reference-stage">
+    <%- include('partials/login-background') %>
+    <section class="login-shell" aria-labelledby="loginTitle">
+      <div class="art-panel"><%- include('partials/login-scene') %></div>
+      <section class="form-panel">
+        <div class="form-content">
+          <h1 id="loginTitle"><a class="brand-title" href="#loginUsername"><span class="sr-only">穿山甲·溯源大师</span><svg viewBox="876 201 475 95" aria-hidden="true" focusable="false"><defs><clipPath id="brandTitleBounds"><rect x="876" y="201" width="475" height="95"/></clipPath></defs><image clip-path="url(#brandTitleBounds)" href="/images/login-woodland/reference.webp?v=20260920-opt" width="1586" height="992"/></svg></a></h1>
+          <div class="login-status" role="alert" aria-live="assertive"><button id="loginStatus" class="status-message" type="button"><%= error || '' %></button></div>
+          <form id="loginForm" method="POST" action="/login" autocomplete="on" novalidate>
+            <div class="field-group">
+              <label class="field-label" for="loginUsername">账号</label>
+              <div class="input-wrap">
+                <svg class="field-icon ui-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v2Z"/></svg>
+                <input class="text-input" id="loginUsername" type="text" name="username" value="<%= typeof username === 'string' ? username : '' %>" autocomplete="username" autocapitalize="none" spellcheck="false" aria-describedby="usernameNote" required>
+              </div>
+              <button class="field-note" id="usernameNote" type="button"></button>
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="loginPassword">密码</label>
+              <div class="input-wrap">
+                <svg class="field-icon ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/></svg>
+                <input class="text-input password-input" id="loginPassword" type="password" name="password" autocomplete="current-password" aria-describedby="passwordNote" required>
+                <button class="password-toggle" id="passwordToggle" type="button" aria-controls="loginPassword" aria-pressed="false" aria-label="显示密码">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"/><circle cx="12" cy="12" r="2.7"/></svg><span>显示</span>
+                </button>
+              </div>
+              <button class="field-note" id="passwordNote" type="button"></button>
+            </div>
+            <div class="remember-block">
+              <label class="remember-label" for="rememberLogin"><input id="rememberLogin" type="checkbox" name="remember" value="1" autocomplete="on" aria-describedby="sessionNote"><span>在此设备保持登录</span></label>
+              <span class="sr-only" id="sessionNote">选择后保持 30 天；未选择时最长 12 小时</span>
+            </div>
+            <button class="login-button" id="loginButton" type="submit"><span class="button-spinner" aria-hidden="true"></span><span id="loginButtonText">登录</span></button>
+          </form>
+          <div class="form-actions">
+            <a class="secondary-link" href="/register?mode=public"><span>邀请码注册</span><%- icon('arrow-right') %></a>
+            <button class="help-link" id="loginHelp" type="button" aria-haspopup="dialog" aria-controls="helpDialog" aria-expanded="false">登录帮助：联系管理员</button>
+          </div>
+          <a class="consumer-entry" href="/v"><span>商品溯源码查询</span><%- icon('arrow-right') %></a>
+        </div>
+      </section>
+    </section>
+    </div>
+  </main>
+  <dialog class="help-dialog" id="helpDialog" aria-labelledby="helpTitle">
+    <div class="dialog-header"><h2 id="helpTitle">登录帮助</h2><button class="dialog-close" id="closeHelp" type="button" aria-label="关闭登录帮助"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18"/></svg></button></div>
+    <% if (typeof supportPhone === 'string' && supportPhone && typeof supportPhoneHref === 'string' && supportPhoneHref) { %>
+      <a class="help-option" href="tel:<%= supportPhoneHref %>">联系管理员 · <%= supportPhone %></a>
+    <% } else { %>
+      <details class="help-details"><summary>如何联系管理员？</summary><p>联系为你分配账号或发送邀请码的企业管理员。当前平台尚未提供公开联系电话。</p></details>
+    <% } %>
+    <details class="help-details"><summary>忘记密码怎么办？</summary><p>请由企业管理员重置密码；重置后使用新密码登录。目前暂不支持自助找回密码。</p></details>
+    <a class="help-option" href="/register?mode=public">使用邀请码注册 <%- icon('arrow-right') %></a>
+    <button class="help-option" id="backToAccount" type="button">返回填写账号</button>
+  </dialog>
+  <script nonce="<%= cspNonce %>">
+    (() => {
+      const form = document.getElementById('loginForm');
+      const username = document.getElementById('loginUsername');
+      const password = document.getElementById('loginPassword');
+      const usernameNote = document.getElementById('usernameNote');
+      const passwordNote = document.getElementById('passwordNote');
+      const status = document.getElementById('loginStatus');
+      const submitButton = document.getElementById('loginButton');
+      const submitText = document.getElementById('loginButtonText');
+      const passwordToggle = document.getElementById('passwordToggle');
+      const passwordToggleText = passwordToggle.querySelector('span');
+      let navigating = false;
+      function setFieldError(input, note, message, defaultMessage) {
+        const hasError = Boolean(message);
+        input.setAttribute('aria-invalid', String(hasError));
+        note.textContent = message || defaultMessage || '';
+        note.classList.toggle('is-error', hasError);
+      }
+      function setLoading(loading) {
+        submitButton.disabled = loading;
+        submitButton.classList.toggle('is-loading', loading);
+        submitButton.setAttribute('aria-busy', String(loading));
+        submitText.textContent = loading ? '正在登录…' : '登录';
+      }
+      function clearStatus() {
+        status.textContent = '';
+        setFieldError(username, usernameNote, '', '');
+        setFieldError(password, passwordNote, '', '');
+      }
+      passwordToggle.addEventListener('pointerdown', event => {
+        if (document.activeElement === password) event.preventDefault();
+      });
+      passwordToggle.addEventListener('click', () => {
+        const wasFocused = document.activeElement === password;
+        const start = password.selectionStart;
+        const end = password.selectionEnd;
+        const showing = password.type === 'text';
+        password.type = showing ? 'password' : 'text';
+        passwordToggle.setAttribute('aria-pressed', String(!showing));
+        passwordToggle.setAttribute('aria-label', showing ? '显示密码' : '隐藏密码');
+        passwordToggleText.textContent = showing ? '显示' : '隐藏';
+        if (wasFocused) {
+          password.focus({ preventScroll: true });
+          if (start !== null && end !== null) password.setSelectionRange(start, end);
+        }
+      });
+      username.addEventListener('input', () => setFieldError(username, usernameNote, '', ''));
+      password.addEventListener('input', () => setFieldError(password, passwordNote, '', ''));
+      form.addEventListener('submit', async event => {
+        if (!window.fetch) return;
+        event.preventDefault();
+        if (submitButton.disabled) return;
+        clearStatus();
+        const trimmedUsername = username.value.trim();
+        let firstInvalid = null;
+        if (!trimmedUsername) { setFieldError(username, usernameNote, '请输入账号', ''); firstInvalid = username; }
+        if (!password.value) { setFieldError(password, passwordNote, '请输入密码', ''); firstInvalid = firstInvalid || password; }
+        if (firstInvalid) { firstInvalid.focus(); return; }
+        username.value = trimmedUsername;
+        setLoading(true);
+        try {
+          const response = await fetch('/login', {
+            method: 'POST',
+            headers: { 'Accept': 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' },
+            credentials: 'same-origin',
+            body: new URLSearchParams(new FormData(form))
+          });
+          // Existing production releases return HTML/redirects; newer releases return JSON.
+          // Follow the server's real result without changing account or session rules.
+          if (!(response.headers.get('content-type') || '').includes('application/json')) {
+            const destination = new URL(response.url, window.location.href);
+            if (response.ok && response.redirected && destination.origin === window.location.origin && destination.pathname !== '/login') {
+              navigating = true;
+              window.location.assign(destination.href);
+              return;
+            }
+            const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+            const message = page.querySelector('#loginStatus, .error')?.textContent.trim() || '';
+            const invalidCredentials = response.status === 401 && (!message || /账号或密码(?:错误|有误)/.test(message));
+            status.textContent = invalidCredentials ? '账号或密码有误' : message || (response.status === 429 ? '登录尝试过多，请稍后再试' : '登录失败，请重试');
+            if (invalidCredentials) { password.value = ''; password.focus(); }
+            return;
+          }
+          const data = await response.json();
+          if (!response.ok || !data.success) {
+            status.textContent = data.msg || '登录失败，请重试';
+            if (data.code === 'INVALID_CREDENTIALS') { password.value = ''; password.focus(); }
+            return;
+          }
+          navigating = true;
+          window.location.assign(data.redirect || '/');
+        } catch (error) {
+          status.textContent = '网络连接失败，请检查网络后重试。';
+        } finally {
+          if (!navigating) setLoading(false);
+        }
+      });
+    })();
+  </script>
+</body>
+</html>

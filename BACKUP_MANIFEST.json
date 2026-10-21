@@ -1,0 +1,2063 @@
+{
+  "format": 1,
+  "date": "2026-10-21",
+  "project": "reliacode-main-20260917",
+  "repository": "NSIETeam/ReliaCode",
+  "original_head": "ba60fdbf28115cf1211514005d632fc86853e400",
+  "original_branch": "main",
+  "source_files": [
+    {
+      "path": "source/.editorconfig",
+      "sha256": "251db34e2e35b25bcd7888df2be0f92d56e0e204a405e1374e691710ed583827",
+      "git_blob": "192c070cf03df5d7af0521a1073c0919cb46f742",
+      "bytes": 156,
+      "mode": "100644",
+      "original_path": ".editorconfig"
+    },
+    {
+      "path": "source/.env.example",
+      "sha256": "c1d4c330c4c021b42bdb61a887d450a5eab5d888862233aa8acdadeec2465379",
+      "git_blob": "0c36056c6eee7b51208a5fc657c4eed858c49411",
+      "bytes": 1409,
+      "mode": "100644",
+      "original_path": ".env.example"
+    },
+    {
+      "path": "source/.github/workflows/ci.yml",
+      "sha256": "407b4672547817bd8df315f30bee19dafdcfc66fde76a4ee3b1c0e7f0e7c9b3c",
+      "git_blob": "d8453979327a4d54a8e0816f01465dda87c01e4f",
+      "bytes": 2700,
+      "mode": "100644",
+      "original_path": ".github/workflows/ci.yml"
+    },
+    {
+      "path": "source/.github/workflows/dast.yml",
+      "sha256": "3592e7d91bd229b73bb4fc16e0ff8ebed62b756679792607356a7a7902dc0aa4",
+      "git_blob": "a143c7a6efdb88a353b8ab71fda2b226bc185d56",
+      "bytes": 1013,
+      "mode": "100644",
+      "original_path": ".github/workflows/dast.yml"
+    },
+    {
+      "path": "source/.github/workflows/openepcis-contract.yml",
+      "sha256": "1f3bf4053c8c30f4f83d9b4d88626c07166d1359280fed1ff9f93f837de32dbf",
+      "git_blob": "6778f790462e8a8394ff47fbaf78ab70e7312ed7",
+      "bytes": 769,
+      "mode": "100644",
+      "original_path": ".github/workflows/openepcis-contract.yml"
+    },
+    {
+      "path": "source/.github/workflows/pages.yml",
+      "sha256": "9cba706e671b324290b1030845809a042bc559477c71acf0cc7494966226c9dd",
+      "git_blob": "09f94e815397af5223a98fec86d438a348e4b167",
+      "bytes": 1936,
+      "mode": "100644",
+      "original_path": ".github/workflows/pages.yml"
+    },
+    {
+      "path": "source/.github/workflows/production-release.yml",
+      "sha256": "c671813e079bf215ef7300639e55e485ac4f5cd1184d37ca56594f783e82c468",
+      "git_blob": "2243048499649434cae177e872a92b8cbd1c0d67",
+      "bytes": 9104,
+      "mode": "100644",
+      "original_path": ".github/workflows/production-release.yml"
+    },
+    {
+      "path": "source/.github/workflows/production-scale-gates.yml",
+      "sha256": "020755fbf185d1d9a5da387299467d935cb4c696cf0cb9ee1bb4eaf4bee539e2",
+      "git_blob": "2d0083c834eb0fa8cdd936a396a01cf57206fb81",
+      "bytes": 1420,
+      "mode": "100644",
+      "original_path": ".github/workflows/production-scale-gates.yml"
+    },
+    {
+      "path": "source/.github/workflows/security-analysis.yml",
+      "sha256": "80b3f4dbb5e6203efb95b1dbf018fff0ea16ddbf94441176f92ea38d87ca98cb",
+      "git_blob": "3e97262b42d59246c55487625830bf3452c08532",
+      "bytes": 1918,
+      "mode": "100644",
+      "original_path": ".github/workflows/security-analysis.yml"
+    },
+    {
+      "path": "source/.gitignore",
+      "sha256": "8d38d464415fad20827b9a2b5b327455fd5e8d860fbdecc3a92e38703373c31d",
+      "git_blob": "7ad12a2ff413a9b77ea2fbf42e44fbee06c3acc7",
+      "bytes": 168,
+      "mode": "100644",
+      "original_path": ".gitignore"
+    },
+    {
+      "path": "source/.gitleaksignore",
+      "sha256": "761e375ded28e8350a9e8ccbb714fc6bf0e864b8c3fc633ec8199847cb279c4f",
+      "git_blob": "84a3012c784ef5b62d9ac813061f2fc4901c0c01",
+      "bytes": 434,
+      "mode": "100644",
+      "original_path": ".gitleaksignore"
+    },
+    {
+      "path": "source/LICENSE",
+      "sha256": "bb28c48e3e078166e91cfc2b6db7ffebb8a0973b9e23b3df060561292d8d69ec",
+      "git_blob": "d0381d6d04c77c78c42ae875f97d38483ba0c636",
+      "bytes": 10140,
+      "mode": "100644",
+      "original_path": "LICENSE"
+    },
+    {
+      "path": "source/NOTICE",
+      "sha256": "56646f3ff62326308dddc2c6a51b392fac9b3b6f77cdbad8cbc69b36586b48e4",
+      "git_blob": "4e699cbbbee5e747947a276f62d0383911026439",
+      "bytes": 190,
+      "mode": "100644",
+      "original_path": "NOTICE"
+    },
+    {
+      "path": "source/README.md",
+      "sha256": "6e1a253b9da7d129e7bfe144869dc8c1bf17f3a16dc0519e6c155875aafc7303",
+      "git_blob": "8191d7f7efdb0d05db53cabfb8650a2589c04845",
+      "bytes": 2913,
+      "mode": "100644",
+      "original_path": "README.md"
+    },
+    {
+      "path": "source/THIRD_PARTY_NOTICES.md",
+      "sha256": "494e7530b18dec5de6f64d62a7a1c1dcc7c8cb4d245909bf1d16c42ef8df936c",
+      "git_blob": "7d756d59f6765b5542d5b75eeb89e0ff38b3a43f",
+      "bytes": 1117,
+      "mode": "100644",
+      "original_path": "THIRD_PARTY_NOTICES.md"
+    },
+    {
+      "path": "source/apps/scan-api/.dockerignore",
+      "sha256": "8a339d86139a9d0c646e7c77e1a02da21f9f4436fb0054be3bdae6469e757afd",
+      "git_blob": "b82302eafae354c44cc992e1e103469c9339b447",
+      "bytes": 42,
+      "mode": "100644",
+      "original_path": "apps/scan-api/.dockerignore"
+    },
+    {
+      "path": "source/apps/scan-api/Dockerfile",
+      "sha256": "4534cc98129113a538a7567b91562bfa845a88336603b3adfe73ca480f90732c",
+      "git_blob": "38d4aa5259dd1240e99e24721e96a0ce2c62bf75",
+      "bytes": 827,
+      "mode": "100644",
+      "original_path": "apps/scan-api/Dockerfile"
+    },
+    {
+      "path": "source/apps/scan-api/README.md",
+      "sha256": "c7d3c4933540d75d846c547b6c7ebd99b8fb5022c5a49e7c7b2ed28f5ef6903b",
+      "git_blob": "97a51397941315b4918efc2390fadd82bb15704e",
+      "bytes": 9010,
+      "mode": "100644",
+      "original_path": "apps/scan-api/README.md"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/001_initial.sql",
+      "sha256": "7826870a7545c592732198221252db72af13659bfe654f298a7dab3f85cbdf18",
+      "git_blob": "07b0def268077ab5ed2323f7ca33c081bbd8c43f",
+      "bytes": 9150,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/001_initial.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/002_event_outbox.sql",
+      "sha256": "d9916429a727332a029e182318f18f70d1a4ca160f8e719fdf9a0b0a8b622cdf",
+      "git_blob": "984ad24b762168ffc431af05bc89ebaef25f5c94",
+      "bytes": 591,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/002_event_outbox.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/003_public_verification.sql",
+      "sha256": "3a2d287c4a9f725e08d38b28a4dc8c8573b225d50585030d6fa0cc95370574b4",
+      "git_blob": "d461c054a7c1da0a2a3e1e3e2c0600bcedc6d632",
+      "bytes": 414,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/003_public_verification.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/004_admin_persistence.sql",
+      "sha256": "3010b4f85443933a6ab34c6875fb2788b64d17e862c8c45d9315e1106547ff5a",
+      "git_blob": "3aa0c4e792ccc5b01b42887f577ba4287bc618ed",
+      "bytes": 983,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/004_admin_persistence.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/005_local_users.sql",
+      "sha256": "784ca294c10410bc66d62f5da8ed499ce53267315672bb09622c61d15e8cedc3",
+      "git_blob": "acb62a5924dd7e5eb64ef7722cb7bda82e563a96",
+      "bytes": 1221,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/005_local_users.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/006_organization_memberships.sql",
+      "sha256": "e1204d6b2831818f5aad958a6c3dc88e7df47ca63b4e708026055f089cf7cd61",
+      "git_blob": "98a55c12e7a6fc73097c6a9fb2018dd5b436c273",
+      "bytes": 3576,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/006_organization_memberships.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/007_password_recovery.sql",
+      "sha256": "73bc2245feb636f274ca117dfc9fd1a170719d12bd003bedcb6b3710542a9384",
+      "git_blob": "72ab9467c62d084c72fb805b145022738eac9a34",
+      "bytes": 782,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/007_password_recovery.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/008_organization_entitlements.sql",
+      "sha256": "0af9e369ea27774ea44f787dab550d3b7a36b5e02396b84cac3a46c7335d3eea",
+      "git_blob": "fed97082ee3ba668f453d55ddfc7cd3c4ed7a6cc",
+      "bytes": 2364,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/008_organization_entitlements.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/009_phone_recovery.sql",
+      "sha256": "038ce9614a72c6535855e9be94c2c1654348aa270a6156e04f3ef5537c6bee64",
+      "git_blob": "a56f8262a5c317e768a597a7a68991d6351bc95c",
+      "bytes": 1106,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/009_phone_recovery.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/009_tenant_access_indexes.sql",
+      "sha256": "466f64399282293ff592b3e8db5993785c7cc676841100caf604506f4378d8ed",
+      "git_blob": "3ea8610bfae181fe8ac23a63a770d5bdf6e9e5a9",
+      "bytes": 1554,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/009_tenant_access_indexes.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/010_workspace_normalization.sql",
+      "sha256": "84389dd48f527ae1cfee54677749c97c54f604394bd0baf73d8e9aea76d56b0f",
+      "git_blob": "96421d10dbfb06110311520844ccf0b5ddc0b815",
+      "bytes": 2317,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/010_workspace_normalization.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/011_saas_core.sql",
+      "sha256": "ef1e9de8d1493030cbb1965eac33708fcbd8eb0b17ed4c3d83ed6fa60b051ef5",
+      "git_blob": "79476c876db8c5cd460a9aca5c7311806a6d12eb",
+      "bytes": 20508,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/011_saas_core.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/012_webhook_delivery_runtime.sql",
+      "sha256": "b6fcddc5212bb0db8b3a3200455d955dcd61ad2519a680cf81c52423bd3b5158",
+      "git_blob": "87b41599d76abb68272e0db23890a85bdb2df396",
+      "bytes": 315,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/012_webhook_delivery_runtime.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/013_webhook_replay_control.sql",
+      "sha256": "0d4f8a60886f32919f5da04ef78d1a45d7ba20f5899b8fce85e44b6f5078dd74",
+      "git_blob": "1accd88b1be367dd205284779194af6f5157bbfc",
+      "bytes": 1201,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/013_webhook_replay_control.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/014_code_export_jobs.sql",
+      "sha256": "f2ae98847d569fa92c6b655e80ecd3cfa17c9de61deee585a2ddc34d17d9dc56",
+      "git_blob": "8651cc17908eeb6fafda77e0552f6a1ccce28467",
+      "bytes": 1310,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/014_code_export_jobs.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/015_session_security.sql",
+      "sha256": "9c9068cb05eda68796f9655d8b63f75a3ff92dcb480fa0a3c2f8bcee64b1e69f",
+      "git_blob": "c349495371ddd3d6c3647c557ce3b4860584ecf1",
+      "bytes": 2219,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/015_session_security.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/016_manual_account_recovery.sql",
+      "sha256": "0bbc19750b75d7e80452a3c24ab14e30e8908b36d01e519f3b1f7978e364d6b6",
+      "git_blob": "879fb1f69d3ab0f6fbeb13c5f28345b05ad7919a",
+      "bytes": 1326,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/016_manual_account_recovery.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/017_tenant_rls.sql",
+      "sha256": "a24e89d9de5a49fc082955e1e9aaf351ce253cf14f00299d7951c9943fa07982",
+      "git_blob": "2e7a74548c65c2473c2f2ae77619217496889477",
+      "bytes": 9619,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/017_tenant_rls.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/018_passkey_step_up.sql",
+      "sha256": "6c57a7e2c451d873cb9304d7e9f3c03ec18df20669258767ca86fe7d1c674543",
+      "git_blob": "5cd77706e96fe58ad375b2f2c0574d3d71868fc4",
+      "bytes": 268,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/018_passkey_step_up.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/019_recovery_code_idempotency.sql",
+      "sha256": "c8b8ff4e1732ba7e3215547b0c5511886f755e6d50b290108cd7d33dac436f59",
+      "git_blob": "ea9fe21509974a18aca031410f10f10866a2f60d",
+      "bytes": 980,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/019_recovery_code_idempotency.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/020_device_event_authorization.sql",
+      "sha256": "acf4bc88200ade7b8320939516a790a0f63887b495e3c30154f8e2bad74a8dca",
+      "git_blob": "ab5f3797f98ac667242c37e220cf899b53ecaaf2",
+      "bytes": 2111,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/020_device_event_authorization.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/021_gs1_master_data.sql",
+      "sha256": "74bec81ebe8b24a71b733cacf368a6d328932f71e11c0b2ba691fd4d1b06d606",
+      "git_blob": "3f0cff833dd776bc67232e693c5f185d34db3342",
+      "bytes": 1292,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/021_gs1_master_data.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/022_sscc_allocation.sql",
+      "sha256": "a7417798a0e6c89c2c03da517bfeffd900b2df92b8e07fbcb45dc0a0b8d3c22c",
+      "git_blob": "c49c12a993204aaf365812b20879ce4442c2a150",
+      "bytes": 3397,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/022_sscc_allocation.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/023_packaging_gtins.sql",
+      "sha256": "c22ec512916433c9d5eb09419a360737addd390ef7f6e0b7f4e04a78c0e82cc5",
+      "git_blob": "dc9bdff1e1100f7423c889c3b0cad3e649a12d95",
+      "bytes": 1186,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/023_packaging_gtins.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/024_gs1_lot_qualifier.sql",
+      "sha256": "4e5be65762f6a140c63317f43766e7e053de7889e2ac74f7f037f34716180087",
+      "git_blob": "b9a400c5703c224a66abcccbd823993c4fdb0738",
+      "bytes": 696,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/024_gs1_lot_qualifier.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/025_document_objects.sql",
+      "sha256": "6c0f246fabeeffeb3bb072b8abde79f8567dfa980ea1819db17c153eb022be5b",
+      "git_blob": "5aedb721b412b7c306e6f2fd24183acb23d21dd3",
+      "bytes": 1093,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/025_document_objects.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/026_trace_event_object_snapshots.sql",
+      "sha256": "d8d2f719be000206e493a75e35702d894b5c472afddf1b4e8c215d5a10210fab",
+      "git_blob": "eeac24e033c751801568e30860bc142fe942b92e",
+      "bytes": 1637,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/026_trace_event_object_snapshots.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/027_atomic_repacking.sql",
+      "sha256": "c97daefd9acee451e3aa9da944bfabad58930af6e458d5ab6eed95f2afe2ce7d",
+      "git_blob": "f696cfc50f771106a5e663059b2d0109509ceb29",
+      "bytes": 863,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/027_atomic_repacking.sql"
+    },
+    {
+      "path": "source/apps/scan-api/migrations/028_document_execution_progress.sql",
+      "sha256": "b0d8d7586c12ef2ff1171d6c6fea0f3b1edd9aebcef2fa676fab4f43a47af539",
+      "git_blob": "793c7e830c646fe5ad5f9075835457bcf0c88466",
+      "bytes": 1291,
+      "mode": "100644",
+      "original_path": "apps/scan-api/migrations/028_document_execution_progress.sql"
+    },
+    {
+      "path": "source/apps/scan-api/package-lock.json",
+      "sha256": "60230e1d36d14a82ba3fb5e5f0753f0b56359940f9b73dc7c7e38f7982f4cf2d",
+      "git_blob": "5ff4409f069e03f4c9aefab4f77a23fb1d59f580",
+      "bytes": 65779,
+      "mode": "100644",
+      "original_path": "apps/scan-api/package-lock.json"
+    },
+    {
+      "path": "source/apps/scan-api/package.json",
+      "sha256": "4c510399db05d5b7dd23e72be7992677f8cc02c7e46009b67b286f42944f52da",
+      "git_blob": "23ef9026b0c52ea1a443d78cd6dd5109ba2783e2",
+      "bytes": 951,
+      "mode": "100644",
+      "original_path": "apps/scan-api/package.json"
+    },
+    {
+      "path": "source/apps/scan-api/src/app.mjs",
+      "sha256": "540ac2ac28c8ae6d9634ffacc9e5aa6a8e0f9544e964fc9c60b3b25c2ee914fc",
+      "git_blob": "37cd1bc065b5ca8c3ecd65c0e9803e25ab22759c",
+      "bytes": 9439,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/app.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/auth-recovery-store.mjs",
+      "sha256": "59f362dc16bf6938c8eebbe9bb93960c2eaa1e3f98f198ac572013100e3c1cab",
+      "git_blob": "45d0432ad16ea8584195ea03e051dbb0a4bef84c",
+      "bytes": 4528,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/auth-recovery-store.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/auth-recovery.mjs",
+      "sha256": "4806d5a629f370b790c2661f64b69307de1b8d42ccec0c475a961dc94524aac4",
+      "git_blob": "d16acb17982220a39a6f05e120b58de015b44b3f",
+      "bytes": 6645,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/auth-recovery.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/auth.mjs",
+      "sha256": "04bdb0b1e775a3a4e50eaa9543f9e375cf12f095cc72ebe5a26025e6dade453c",
+      "git_blob": "a53c0deabe22edd1cb1c9dbb1a3c513922e4bf1f",
+      "bytes": 8524,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/auth.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/code-export-worker.mjs",
+      "sha256": "d12c1d3e5a9fb7fd5b8fabc57b6480127a4836b812e4dded19a35b41d4bc26d5",
+      "git_blob": "5c410b3f2b077b8103373e6ce9a49931b3f836f4",
+      "bytes": 3816,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/code-export-worker.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/code-job-worker.mjs",
+      "sha256": "08d9879b81798c54d66ed0182800a09dbe1a1f489210e40615e24b81403af09f",
+      "git_blob": "01df9fade25d4293480da7863e5575c3166679d5",
+      "bytes": 4921,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/code-job-worker.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/config.mjs",
+      "sha256": "ab209d7b41b8f2740923ed41bbf9d08c1fc4f7f268807179bd68feef077de4ee",
+      "git_blob": "ef438118216564d5779c188d5156b3a0f2303dec",
+      "bytes": 8108,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/config.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/database-context.mjs",
+      "sha256": "c115f5cc06e138ffa70e3f60b781652222feda256ef042062b58972b0e5ef00e",
+      "git_blob": "94557c19663ecd3173ea8ac18ef662554216c157",
+      "bytes": 1038,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/database-context.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/db.mjs",
+      "sha256": "b887e8366f1af4c27e89a94326086b1c8e22189924af982c40cc4ea9f4808785",
+      "git_blob": "7d605271ddc1a215f43bdde925258438f5f3d1c3",
+      "bytes": 1393,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/db.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/device-authorization.mjs",
+      "sha256": "3a42571e4223a6bd23e8aeeee870ae32f478b41aa721565795b1704104c9860b",
+      "git_blob": "a51dceda00dc926b6beb7b2fa9c044fb799cea7c",
+      "bytes": 1742,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/device-authorization.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/domain.mjs",
+      "sha256": "b14373db537839b60895549768911e58e40478b7459e1b4f44ad66fbee4f41e9",
+      "git_blob": "7480b039b4e9f66b499a5089b3a7cc4773229518",
+      "bytes": 3056,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/domain.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/email-delivery.mjs",
+      "sha256": "00947a7fdc0f8d8b54b45ae6ca5d2f9e5bd33fa996ba458074db608d9408ec58",
+      "git_blob": "f21065e5be5bdd3500141506abc7c9f7612d5a54",
+      "bytes": 1083,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/email-delivery.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/entitlements.mjs",
+      "sha256": "561703742c7dad6bd7a436d55709aef4800ff6f3f1f0eba567af816f06c9c8d8",
+      "git_blob": "e03cca837d053f5a06fc4dfb312e565c63a13d7d",
+      "bytes": 4720,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/entitlements.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/epcis-client.mjs",
+      "sha256": "3b3ecc4ff495abc5967981d48777cca327c903a782677a2a419a427d21bf9b01",
+      "git_blob": "7b2646c98bea1adddbdeb5ac5ed4b6b8c1a013c2",
+      "bytes": 2882,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/epcis-client.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/epcis.mjs",
+      "sha256": "0c4b079b019e39f1ed556597637fb784bb089c2fc04b73fd606a11d649738590",
+      "git_blob": "7f0d9e4a47d896493ae566d83547f9bc2a695dbb",
+      "bytes": 2351,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/epcis.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/gs1.mjs",
+      "sha256": "26c4851c8044dcfbc1bd2c747a5462ee373ef2ecd9986a34f4b5d2a70ee96bf6",
+      "git_blob": "4c88edba94f3f6a4ba73f2ae15ee89a1b97bc848",
+      "bytes": 2368,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/gs1.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/healthcheck.mjs",
+      "sha256": "99b29eebfd7740840cb0c0f9f3f04bdd35a87dae549c825d09fb28ac8350d184",
+      "git_blob": "0e9edfb5b1fbefe42e259dd5a11f2a7608d78226",
+      "bytes": 189,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/healthcheck.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/idempotency.mjs",
+      "sha256": "a5959b91faf40c98986d49d4243589e3865a6eb53788a9c2219f9c52837e18de",
+      "git_blob": "bfd0a218add22097241882834f6878a6ad58374d",
+      "bytes": 1362,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/idempotency.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/manual-recovery-routes.mjs",
+      "sha256": "c17eb5644382fea44b43433e4cdf18b034b8c164f9c8be3262518617185feced",
+      "git_blob": "d4f499244d7b9aa3e7e330b35841fecc6bbb9845",
+      "bytes": 8026,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/manual-recovery-routes.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/metrics.mjs",
+      "sha256": "18a6b388bde4a88779dce8978fc4401c3dac24ffacf04bf821cfd9761b4d76c1",
+      "git_blob": "d9401cfe815afeb3757d585afc61e28de694b9d6",
+      "bytes": 3168,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/metrics.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/migrate.mjs",
+      "sha256": "9eb81d67321547989a0435bd8b489fa9012004a47671aa4188efff41daf2ef13",
+      "git_blob": "0302c3ff6da95df5f567dd0ba124f3de23c0a8d6",
+      "bytes": 1666,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/migrate.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/object-storage.mjs",
+      "sha256": "d936b273f85a0ecaa3d2a633bd48f3c0aed0ee1d4da9e24a51e68b79c3b9e955",
+      "git_blob": "6efc1a23032dbf83caddcba381ba9047a78aab07",
+      "bytes": 1034,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/object-storage.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/outbox-worker.mjs",
+      "sha256": "f67302fcbe501ee79eaddccf3c10a7adfc87849df021043982150bc2aae49380",
+      "git_blob": "d1223e75e32730913a7a307ae99dcec5ba389a35",
+      "bytes": 2351,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/outbox-worker.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/passkey-policy.mjs",
+      "sha256": "2620de05584d3462af77c77804d194d66d24a6d444b2008ab8f79dee5211666d",
+      "git_blob": "d553c46a1e10a6615af7640d1d804704ed6d98a2",
+      "bytes": 652,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/passkey-policy.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/passkey-routes.mjs",
+      "sha256": "6574484632725b4a8ff7c621a33e718cc18fd286460e4775962ca87d0845a465",
+      "git_blob": "e9f842615cedb91726bc440e09ff7907ed384e8d",
+      "bytes": 20044,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/passkey-routes.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/phone-recovery.mjs",
+      "sha256": "2ce3d191ead505a8cdf3cade597eee2614f652ef1e6e9293b257abdc5c3a1a13",
+      "git_blob": "f80ea24c9fb4757be5ff12399dcf33eab137d345",
+      "bytes": 4338,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/phone-recovery.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/recovery-routes.mjs",
+      "sha256": "165f9879b27af5cd71601e79b3fcda0a710c975d6807875e16c9e7d2e4e2f8ce",
+      "git_blob": "ede0973b099eff4907b0af5f425c01d06483967e",
+      "bytes": 2532,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/recovery-routes.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/routes.mjs",
+      "sha256": "a3237ddc3feb5369c960d4825a485c1272dacfebce76aa09de95d8372eedd23b",
+      "git_blob": "a01a41a3c7531109203a341dd5194fab3a1b5afc",
+      "bytes": 67645,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/routes.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/saas-routes.mjs",
+      "sha256": "e230dd56186982a22a4366dd1e782fff7d219576f078ba2aa76257a2888fab5d",
+      "git_blob": "767eec33d93a9766fbabcfde8f864ba85b34ed3a",
+      "bytes": 60216,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/saas-routes.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/schema-version.mjs",
+      "sha256": "beccc76844701b3f971060b97a6e4e69f2d02bae3bae3dab7fd5b38c394ca337",
+      "git_blob": "abf68389fd8bd47e435a8c27e982e21139b84a2e",
+      "bytes": 78,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/schema-version.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/schemas.mjs",
+      "sha256": "9ba252afebbf748527dd2003270fe016e9741b754dda8886068b669acd131683",
+      "git_blob": "81f74b24dec7b838f89e68474d04a5615e310be7",
+      "bytes": 1857,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/schemas.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/server.mjs",
+      "sha256": "e2393d640c13ed3aec111736c9c9a7db1c9254f6c7de0ea60738acfc98f3b650",
+      "git_blob": "f6528cf63b31138651a68f788829749308b67e95",
+      "bytes": 1094,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/server.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/session-security.mjs",
+      "sha256": "8c182c9e169ce67094562ad4c984fe8d4d9853e3a08530f977ff9fb0fd1f50e4",
+      "git_blob": "fe67625fef0b50ad79d6bea80c2a16d95e50dec3",
+      "bytes": 3934,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/session-security.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/supply-chain-routes.mjs",
+      "sha256": "af81ed7bc6f3b3fe271979b3d4fa82158632061e8d8aaef92b13afb1d09a075b",
+      "git_blob": "65538b764560a3e82ee7f58be01fae5effa82169",
+      "bytes": 12535,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/supply-chain-routes.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/webhook-routes.mjs",
+      "sha256": "137dc1a4842340c4a7b3167b9cf85409b028dfef8ae7937ecb7a1a0b84c963f0",
+      "git_blob": "19dcef1f5d1de964af96405a79929e75d7442909",
+      "bytes": 8192,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/webhook-routes.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/webhook-security.mjs",
+      "sha256": "8215a7b649ea5e9606856b47b514552b14be2552fd3a69cc2535448cdd165da9",
+      "git_blob": "9c8a5124debea5b95b4d023fb8dbc11b0ee2130e",
+      "bytes": 3199,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/webhook-security.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/webhook-worker.mjs",
+      "sha256": "1efae65b4b26862d2e3117155388c5649734ee8171a0a6f65222183d960fe97c",
+      "git_blob": "4ae0ae5601c18b5a8b7754edca10faa448405239",
+      "bytes": 3619,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/webhook-worker.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/webhooks.mjs",
+      "sha256": "3578be90969f83e08a06f399736b166e526e71fc5fe51f4ffe45b62b679ad183",
+      "git_blob": "d4a7cd9b7eefe2fd3fcd5fb385e2d545a2dbf2a2",
+      "bytes": 321,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/webhooks.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/workspace-normalization-contract.mjs",
+      "sha256": "d658a08c0e5226aa11dd0aeb3f337d056d19e58b47a9f8d43a62d6db2e815fc9",
+      "git_blob": "10abec72079311a15572a3aab0aed5ff613de2d1",
+      "bytes": 10246,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/workspace-normalization-contract.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/src/workspace-normalization.mjs",
+      "sha256": "99c9d75a8776579f2f71e3e33477e1e0d08c40f3fd6021a1f6712d4743ccaa6a",
+      "git_blob": "142e89c1e2afa7a44d29bb59d286a2169119b2ea",
+      "bytes": 4848,
+      "mode": "100644",
+      "original_path": "apps/scan-api/src/workspace-normalization.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/app.test.mjs",
+      "sha256": "16274b13580390a133b3ae3530cc1e7c6d89ecac109fa4fec47531dacbec5192",
+      "git_blob": "0b91ff9312842c89861236425a7833ac00cf0742",
+      "bytes": 6920,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/app.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/auth-recovery-store.test.mjs",
+      "sha256": "5e49a56cbafaa80842b05a1adacd711c2b836367f3073592c41a462ea3b68ac2",
+      "git_blob": "b9425440c1f4fa0185d5af6d78e06eb7dc1a89e4",
+      "bytes": 4072,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/auth-recovery-store.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/auth-recovery.test.mjs",
+      "sha256": "d80725825cbe7c0823c2ef9099c71c29dc9be3ef0f1246b890d602f3abacc717",
+      "git_blob": "f41f7a4cff68e93545652146922ea33d4dd29bf7",
+      "bytes": 5237,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/auth-recovery.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/auth.test.mjs",
+      "sha256": "615371bc6522643629c9b37e999d3c01d111ee62481fefd1ea5437a7ff891da8",
+      "git_blob": "712bc649f84b4ba6161d8e696d0a0e8b9e21c2a8",
+      "bytes": 1136,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/auth.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/code-export-worker.test.mjs",
+      "sha256": "960252608e96edeccdde1525499a6b40fc8fac7406f90e38059e543f889f41c2",
+      "git_blob": "e68a392a43b094870990042c23f4b95e42743158",
+      "bytes": 3204,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/code-export-worker.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/code-job-worker.test.mjs",
+      "sha256": "548c9eb8daad40069ca1e9b6294dfe0573274bcf60c67c29198d1a824fa1baff",
+      "git_blob": "cb9050a49537e4879eb2a807321569a20d0bbe4a",
+      "bytes": 4951,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/code-job-worker.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/config.test.mjs",
+      "sha256": "660eff0ec84ee2c576c6817796dd17e1c4111dbd2bf5a88a18d5ce15797dbbe5",
+      "git_blob": "dbfd087a06f05b37ff5e25f3425ef1234da9b081",
+      "bytes": 5053,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/config.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/database-context.test.mjs",
+      "sha256": "4edff7e3639cc680101d40d59c38a7407c8298e394f900a75c44075e0c61ada1",
+      "git_blob": "1402d388389a0c72c43f9d64eb03320c9d2e6783",
+      "bytes": 1230,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/database-context.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/device-authorization.test.mjs",
+      "sha256": "5667b3cb806c3f839067f70b41b45e15e057fd96e2b0bac4f0fba15e3ef28389",
+      "git_blob": "b8b65d13330d87a34eb4f4025f17bf1d86472b46",
+      "bytes": 5775,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/device-authorization.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/document-objects-route.test.mjs",
+      "sha256": "c49d3f0546adb942d31e3a2207eaf04d728a14f861beb0b6a3f4a8cd3f711667",
+      "git_blob": "4530030104452e79c7d4f354a643f195b2650a3c",
+      "bytes": 5299,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/document-objects-route.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/domain.test.mjs",
+      "sha256": "ab18b1658f644e14a2e77094fe6db49eb19d18dfcf93af1470e85a22deb09f90",
+      "git_blob": "5935d479fe3c1399867e738750906ae84bcc72f8",
+      "bytes": 1299,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/domain.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/entitlements-api.test.mjs",
+      "sha256": "e5f320615711ab65e59a50ca1140c3fe7ad8e50d39fc6da87b9539dd6cf50f8c",
+      "git_blob": "9f97c3055f591364be1240e37a8fe5b799bef2e9",
+      "bytes": 3232,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/entitlements-api.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/entitlements.test.mjs",
+      "sha256": "920b13db5d0c59128f9d4d834725c5149a814d5b4c0053b8a05bd6806c749281",
+      "git_blob": "db31ef541d89f9026adac76f5dc20173ffa0abd0",
+      "bytes": 2527,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/entitlements.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/epcis-client.test.mjs",
+      "sha256": "5dedcfeb3d1d20f6bc34187dcf9e6ee6c33508aae9d9952ebe205f914e186326",
+      "git_blob": "c942c2ddb19b98874629d6af5ac306168297c9c7",
+      "bytes": 3047,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/epcis-client.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/epcis.test.mjs",
+      "sha256": "a10bfb5304bc5613301e0572dba54358637142659d49ff7bfd2b94145bcee82d",
+      "git_blob": "af8c446f1fb315aa6953f65ce6a32ad39c2af1c0",
+      "bytes": 2816,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/epcis.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/fixtures/workspace-normalization-golden.json",
+      "sha256": "759a6c3d26caed16c7a14d53c5caf73886b4930b178170d9be5693ee7bb3aa2a",
+      "git_blob": "1266c73d8b7a8ac4ddfee5cbb953fd888b9a54ff",
+      "bytes": 1263,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/fixtures/workspace-normalization-golden.json"
+    },
+    {
+      "path": "source/apps/scan-api/tests/governance-routes.test.mjs",
+      "sha256": "27a77559ceaf347a4c91e908c3a0e18d4ab5651eb1d5a9140585676b7061a789",
+      "git_blob": "a8730763d66053e5f2c6e3d71f6fa3848b5f0b55",
+      "bytes": 3991,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/governance-routes.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/gs1.test.mjs",
+      "sha256": "a3f45c0c05bbbbaef01d19bb2bd2d04cd4ca6e56faa13ce02d625fea41c7c75c",
+      "git_blob": "96812745b74f507b07b3bc3d0a6731781fae493a",
+      "bytes": 1989,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/gs1.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/idempotency.test.mjs",
+      "sha256": "965017d7e169c319d6dbeeb6f5661c892c47f53aa777a0a7865985e98ce78776",
+      "git_blob": "e802da507f539c21a685786d7eaec614dffdc429",
+      "bytes": 1043,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/idempotency.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/manual-recovery.test.mjs",
+      "sha256": "5399a18995bd43e3f4ffdcd5054beb8f61e89a5acf5891839471ee536ea6e197",
+      "git_blob": "3ce471dd0372083e545a7b98c1d7ec6447f57f6c",
+      "bytes": 4221,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/manual-recovery.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/metrics.test.mjs",
+      "sha256": "2278b75ec16ff3de9d8eef2441fdcb1d5757f638b9a8604470a3870853e890f1",
+      "git_blob": "135e06fbd49a7aefaa5958dd8670ccc1ef90276c",
+      "bytes": 1014,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/metrics.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/openepcis-live-contract.mjs",
+      "sha256": "022cb3dcd384b67a632d7d7650db2c8d7b2246e847d94fb4bccbd33ff95e9e1d",
+      "git_blob": "05ab0988c5f1b898375c16c90df63ec14eda9675",
+      "bytes": 1289,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/openepcis-live-contract.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/outbox-worker.test.mjs",
+      "sha256": "95d3e9837e5eb43ad98c4eb02bdef1343d7074151d4a60564db09d33c37494a2",
+      "git_blob": "031661693e70263a74f2f3804b82fb41b18adeca",
+      "bytes": 1193,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/outbox-worker.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/passkey-management.test.mjs",
+      "sha256": "5396f09f7205c585ff9af400ef9c5fe84bb998d9288eccad9d8e9d81a596f150",
+      "git_blob": "d878581ed4645d2ab3e390a34206341d3ba5534f",
+      "bytes": 3480,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/passkey-management.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/passkey-step-up.test.mjs",
+      "sha256": "55efdb5c9bca6b3e2fde545c68efa13dfb9b97e3ff8e08b6c992f991863f2b9d",
+      "git_blob": "bdca14f82e7c726580b64c9b4c337924217c3761",
+      "bytes": 3470,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/passkey-step-up.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/phone-recovery.test.mjs",
+      "sha256": "4f4492930bbc1bd12e519b065750b945765eda6eb967e9e14d8fe608675713bc",
+      "git_blob": "81625422d8239adc4c6102759e90dce951ab5eb5",
+      "bytes": 4310,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/phone-recovery.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/production-scale-gates.mjs",
+      "sha256": "35dcea772454042b545828c9b70dc11c969282307e16272fabec5429fe3068e6",
+      "git_blob": "1127c106cfa4487a4883713465ca7c86c0665371",
+      "bytes": 6397,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/production-scale-gates.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/public-projection.test.mjs",
+      "sha256": "84375f6ece78a5bfb3e99c03a73bafb1a6c3c85c196e977488bd266c9ae2837e",
+      "git_blob": "d2aeb59263c46e1959f28df4dd52471e23946ebc",
+      "bytes": 4597,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/public-projection.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/recovery-code-route.test.mjs",
+      "sha256": "093461de7abeb89184881a3cd8b7ddf209b72c99767bb3acb874a5d37a1525f3",
+      "git_blob": "88d780f138cbae1cac0ac403bdf325975f44ac99",
+      "bytes": 1691,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/recovery-code-route.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/recovery-routes.test.mjs",
+      "sha256": "86be08b4891d0d70a86ae6d0ecbd4a97dda378ce246f8df503a9375f9e5beeec",
+      "git_blob": "cb5ef2ee1a0bfdd2faf622632d6ac670d223c5df",
+      "bytes": 1853,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/recovery-routes.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/registration.test.mjs",
+      "sha256": "f7881be0a6cc60ecc3caa5ac2f0771b383017858982982eff4bf981bf8075664",
+      "git_blob": "513e72afda8905e000d6b51e4460614bbc8bccfd",
+      "bytes": 5515,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/registration.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/rls.integration.mjs",
+      "sha256": "a990af7477f5d5c7ba712b161bfa8e553d01f6dddf526fba0b1ab4012db2425d",
+      "git_blob": "ae22b75f17bb03572cb87c4ccac32042a0506a13",
+      "bytes": 2530,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/rls.integration.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/saas.test.mjs",
+      "sha256": "b5c424ab40910131a4e8904d45d129c96f824d1b7895d7a749925469bbfd151e",
+      "git_blob": "a4ffd9347596ae830b2720c049d72afad5324918",
+      "bytes": 15939,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/saas.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/schema-version.test.mjs",
+      "sha256": "e895f20c26be16caef9d4b65ce040efa56c2645b8d640b1888b7ca26232423e3",
+      "git_blob": "fbcadd250d40abbfa21d364b8706ea7a9f046a82",
+      "bytes": 573,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/schema-version.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/session-management.test.mjs",
+      "sha256": "c82781d9d9b31a506a7f4d307fae987a0cce6248f1d5639a3363d37ed062e7b4",
+      "git_blob": "40674cacaa57eb13d34e16dbc81dac87dda48c12",
+      "bytes": 2360,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/session-management.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/session-security.test.mjs",
+      "sha256": "1e7c7f34c7e552d50439128f7d455c7a46580bd0735ff102751bf551f30b1101",
+      "git_blob": "99c85f2ed93d1675fe5dd746f64ad9a1823e5310",
+      "bytes": 2337,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/session-security.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/supply-chain.test.mjs",
+      "sha256": "bd4be8625831c6605dad4926f13cf8f4b1587fe25417457053a9537337a2eb0c",
+      "git_blob": "f10bea6528e37343feda757a4ee38e56f357fe03",
+      "bytes": 2438,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/supply-chain.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/trace-events-route.test.mjs",
+      "sha256": "c53d0ca3ed3b3ea421215a347eb21bc7e43f4cd5e904520e93ff58bee0c5c595",
+      "git_blob": "f89470047d54365823915d1c73fb4b0a2f52a89d",
+      "bytes": 10868,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/trace-events-route.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/webhook-replay.test.mjs",
+      "sha256": "31650bbccf15a214c7e78eb75302e1483d0d7fa5b1ad5e4078d6690060317e20",
+      "git_blob": "7f79112f8fa3a737b48487a863e91751c90829f2",
+      "bytes": 1271,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/webhook-replay.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/webhook-security.test.mjs",
+      "sha256": "33d263752d6843a593f679832e90689c8ab3770dace7f30fdc890e74f2f6fa5c",
+      "git_blob": "5e678f7ce549892435f518472a9f8f25873c9fcc",
+      "bytes": 1933,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/webhook-security.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/webhook-worker.test.mjs",
+      "sha256": "d76d5d32543eb9093a166bfcef41b52622e856495887feb8288bd5d8a9f0c635",
+      "git_blob": "d8379ea9aec0f52047b6253c585e1bf10e6fa8c8",
+      "bytes": 2195,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/webhook-worker.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/workspace-invalid.test.mjs",
+      "sha256": "a64bcea57dfcdc31d01fdcdebf2649b407f17a4672695af34a87725f14715f05",
+      "git_blob": "1ae5142a335afd7c9722d6e07373fc09a0ac05b2",
+      "bytes": 688,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/workspace-invalid.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/workspace-normalization-contract.test.mjs",
+      "sha256": "9a4674eb7cd0742da3af0f1e5c0ea93c4af365f1f2a4102b0a200d2aaed99892",
+      "git_blob": "31d3f662e21c54ac6d863518970420d60749ff45",
+      "bytes": 2535,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/workspace-normalization-contract.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/workspace-normalization.test.mjs",
+      "sha256": "93913237484c75f80fe8affeb65c3e5703d5164c89e50eefce73492772e9c7a6",
+      "git_blob": "f26c8b21066c2ea7a5ee2bce5b37f1a7d54fa81f",
+      "bytes": 2686,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/workspace-normalization.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-api/tests/workspace-reset.test.mjs",
+      "sha256": "875dcd00a1acd071ddc34897420db40ed74aab9f4f13a6e7ca613375d0f716d1",
+      "git_blob": "4c610dc1b8af5a444912b67e55c6a6c96c61912d",
+      "bytes": 3948,
+      "mode": "100644",
+      "original_path": "apps/scan-api/tests/workspace-reset.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-web/.dockerignore",
+      "sha256": "26d9cd183564879d7b79e2650ec5cd01ab9edeb11a550ea8f76dbda60d038041",
+      "git_blob": "a6b8ff0bf38d8550a1626867e537c25c51d395c9",
+      "bytes": 39,
+      "mode": "100644",
+      "original_path": "apps/scan-web/.dockerignore"
+    },
+    {
+      "path": "source/apps/scan-web/.gitignore",
+      "sha256": "787044cb79f3fec00a8a5d95851b7c42fbe5b62b98a2153dbd7d190c702748d4",
+      "git_blob": "51511d1f8f36f488f26610dcb58157a2e65da2bc",
+      "bytes": 14,
+      "mode": "100644",
+      "original_path": "apps/scan-web/.gitignore"
+    },
+    {
+      "path": "source/apps/scan-web/Dockerfile",
+      "sha256": "62d12881d9e0611c40cb03e468f59d65b5500ac34e7e8c560c5ba76c2bcba06d",
+      "git_blob": "b76c7b2284f0b6ff27eb5ea65b1eca8be7295d64",
+      "bytes": 281,
+      "mode": "100644",
+      "original_path": "apps/scan-web/Dockerfile"
+    },
+    {
+      "path": "source/apps/scan-web/README.md",
+      "sha256": "113f6ba91f5a2aa1f761e88ece38eb63a73866ac6a725c440585d469faaa7727",
+      "git_blob": "51c4ec541459cf4ae2e642ae1e3b687a7bb285ab",
+      "bytes": 4363,
+      "mode": "100644",
+      "original_path": "apps/scan-web/README.md"
+    },
+    {
+      "path": "source/apps/scan-web/app.js",
+      "sha256": "c4ffecc5a91e16b0ffb296876f94b030271ea6c8a26474ecc1def03f5afafbbc",
+      "git_blob": "f91ea44a1f72a3a974c641ada8a6124d6de80212",
+      "bytes": 133207,
+      "mode": "100644",
+      "original_path": "apps/scan-web/app.js"
+    },
+    {
+      "path": "source/apps/scan-web/brand-console.css",
+      "sha256": "3e9d2c778328a460d170a80304fec59a9539ed8e3cf9274969d126f6243e1932",
+      "git_blob": "41b8c120a7097278c80fec3b5ffaf948ce0bcf00",
+      "bytes": 30627,
+      "mode": "100644",
+      "original_path": "apps/scan-web/brand-console.css"
+    },
+    {
+      "path": "source/apps/scan-web/design.css",
+      "sha256": "8f3132951d33878a3600dd489cc6150b3a456a5f18f8619073a2d62414eacc44",
+      "git_blob": "3e4a48a93f09b0d1aa85c7715ced41c7a6eee984",
+      "bytes": 6275,
+      "mode": "100644",
+      "original_path": "apps/scan-web/design.css"
+    },
+    {
+      "path": "source/apps/scan-web/design.md",
+      "sha256": "f8af237374173f05cc7b7068174603292654195624276bbd61cdee6704948d04",
+      "git_blob": "492049abc83105770ad9dedae65808230e487a87",
+      "bytes": 4673,
+      "mode": "100644",
+      "original_path": "apps/scan-web/design.md"
+    },
+    {
+      "path": "source/apps/scan-web/favicon.svg",
+      "sha256": "3fa98d588c6bbc653bb9c8ff6942d0c8ea7ab73420160e5c585c56cf1257ec18",
+      "git_blob": "3056b535e28b724c41849a308e473b305aa802fa",
+      "bytes": 252,
+      "mode": "100644",
+      "original_path": "apps/scan-web/favicon.svg"
+    },
+    {
+      "path": "source/apps/scan-web/figma-redesign.css",
+      "sha256": "2e181fd9d8936575186978d92f8e28db1f1b44baf30bb0bd252ca04288f32dbc",
+      "git_blob": "f4acb057593c80c9038df9c7453977d1eb5cd591",
+      "bytes": 13401,
+      "mode": "100644",
+      "original_path": "apps/scan-web/figma-redesign.css"
+    },
+    {
+      "path": "source/apps/scan-web/index.html",
+      "sha256": "d7a7a900c51926558c156c053cea1c2607a053f08891bf96732dbed2ec48ca24",
+      "git_blob": "e28ece5f4f153d59be6face6a1793530854e03ee",
+      "bytes": 7382,
+      "mode": "100644",
+      "original_path": "apps/scan-web/index.html"
+    },
+    {
+      "path": "source/apps/scan-web/package-lock.json",
+      "sha256": "50a353e78ebf4420f3cce0c4a3fb886fc3bb561aff3937fce9bf9beb7ca7dd97",
+      "git_blob": "11e907aaeb0051c3a4f98e2dd5c29e2bea32669a",
+      "bytes": 2458,
+      "mode": "100644",
+      "original_path": "apps/scan-web/package-lock.json"
+    },
+    {
+      "path": "source/apps/scan-web/package.json",
+      "sha256": "365537f2dabe291154251e813d5593e79346b276fc1cb2b0f3e7ec08a07f743f",
+      "git_blob": "5f74e9c25e42034ad4a9de27aded4100883c7ea6",
+      "bytes": 877,
+      "mode": "100644",
+      "original_path": "apps/scan-web/package.json"
+    },
+    {
+      "path": "source/apps/scan-web/persistence.mjs",
+      "sha256": "05b84fb7a8300c73fcac462055c08f2101955d2fc2d0e9be564aae95992207e9",
+      "git_blob": "6c8375aab5bf04fa2dae862fc588c5747223cee5",
+      "bytes": 5258,
+      "mode": "100644",
+      "original_path": "apps/scan-web/persistence.mjs"
+    },
+    {
+      "path": "source/apps/scan-web/runtime-config.js",
+      "sha256": "aa23917627690b7a713147e171a22c611dfc90e057f629ba4eaef2b1a641cdef",
+      "git_blob": "a04677d02e4e2f9db38dccf55bd651e27e3bdee8",
+      "bytes": 93,
+      "mode": "100644",
+      "original_path": "apps/scan-web/runtime-config.js"
+    },
+    {
+      "path": "source/apps/scan-web/server.mjs",
+      "sha256": "c1f54d8e24c2d2bd1f778a9a18b619cb076de1d6d81eb6c20d5da328d30e2fb9",
+      "git_blob": "2dfc230c31c474b319d467a214ae98302b55507a",
+      "bytes": 5132,
+      "mode": "100644",
+      "original_path": "apps/scan-web/server.mjs"
+    },
+    {
+      "path": "source/apps/scan-web/styles.css",
+      "sha256": "f2f5025b675a7fc21ca59efcbca6d1e078a2f98d29707e018b31f534e91d31c8",
+      "git_blob": "41edd3377f71714ae714692434a45b0d16f979ae",
+      "bytes": 9063,
+      "mode": "100644",
+      "original_path": "apps/scan-web/styles.css"
+    },
+    {
+      "path": "source/apps/scan-web/tests/agent.mjs",
+      "sha256": "6103a1f01b06fdec7a81a5735ffb4bb3d4eb20bec858f7ce4ee4815ce67395e9",
+      "git_blob": "cc2938b2a5b5f355c60888598a434926199463dc",
+      "bytes": 2999,
+      "mode": "100644",
+      "original_path": "apps/scan-web/tests/agent.mjs"
+    },
+    {
+      "path": "source/apps/scan-web/tests/document-console.e2e.mjs",
+      "sha256": "46e0b28974f134db01a36ae348b1984a573dd6d2f288a2b6edaf4f8e23f3c3b2",
+      "git_blob": "1076b368f39492cad18aa421892e501566e048c9",
+      "bytes": 4214,
+      "mode": "100644",
+      "original_path": "apps/scan-web/tests/document-console.e2e.mjs"
+    },
+    {
+      "path": "source/apps/scan-web/tests/domain-api.e2e.mjs",
+      "sha256": "ae5e27cfb2bde5d89ed696e9b6faf6836ddef1b5dbefe91f12228ea8c84596b4",
+      "git_blob": "361a3310fee9bf44f2ffe7836fdfd67aab295299",
+      "bytes": 4738,
+      "mode": "100644",
+      "original_path": "apps/scan-web/tests/domain-api.e2e.mjs"
+    },
+    {
+      "path": "source/apps/scan-web/tests/e2e.mjs",
+      "sha256": "a00950e8d2571bbf04942083408bcc55cd0e73ce020934fc5313fc808d64770f",
+      "git_blob": "f16f6b0ae717b286f53344e584fc845902cbb952",
+      "bytes": 6394,
+      "mode": "100644",
+      "original_path": "apps/scan-web/tests/e2e.mjs"
+    },
+    {
+      "path": "source/apps/scan-web/tests/governance-console.e2e.mjs",
+      "sha256": "e3b472ab8ec163770b34686bd9aa26bb434d343f8c8ed208f44f8eea6de989a3",
+      "git_blob": "e30017b48764d380e437b6cecd6c85b0d37e8e51",
+      "bytes": 4048,
+      "mode": "100644",
+      "original_path": "apps/scan-web/tests/governance-console.e2e.mjs"
+    },
+    {
+      "path": "source/apps/scan-web/tests/helpers.mjs",
+      "sha256": "a63ef1a77658361e045a5e60de87b2335a6d9eb9e033d89f442aaa8fbfcf849d",
+      "git_blob": "6d2fe74e8c8f3b3dbaf117e105189f4ccdb43d3d",
+      "bytes": 1515,
+      "mode": "100644",
+      "original_path": "apps/scan-web/tests/helpers.mjs"
+    },
+    {
+      "path": "source/apps/scan-web/tests/mobile-and-edge.mjs",
+      "sha256": "9a8336847ac3d4417a299686f7dbd7fbae4515680a9829e3b2d1a7b753c37d52",
+      "git_blob": "9d200b18d50ce3476c9f32639da258e500a62d6f",
+      "bytes": 2069,
+      "mode": "100644",
+      "original_path": "apps/scan-web/tests/mobile-and-edge.mjs"
+    },
+    {
+      "path": "source/apps/scan-web/tests/persistence.test.mjs",
+      "sha256": "3f72f0d62c7d8c80293b6e96872edb4f218ae810e3462556d7664acd36796e0a",
+      "git_blob": "59780e14908d0a354189fab48b6ddfb6d826adf8",
+      "bytes": 3687,
+      "mode": "100644",
+      "original_path": "apps/scan-web/tests/persistence.test.mjs"
+    },
+    {
+      "path": "source/apps/scan-web/vendor/LICENSE-jsQR.txt",
+      "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08",
+      "git_blob": "8f71f43fee3f78649d238238cbde51e6d7055c82",
+      "bytes": 11358,
+      "mode": "100644",
+      "original_path": "apps/scan-web/vendor/LICENSE-jsQR.txt"
+    },
+    {
+      "path": "source/apps/scan-web/vendor/LICENSE-qrcode-generator.txt",
+      "sha256": "3a850fa5f08101db6f40676c2786e10bd2cd5fff7b12ffdf1e0c434d4e49d90c",
+      "git_blob": "150770c0fc2994865ccdbef6662735cc083e780d",
+      "bytes": 1071,
+      "mode": "100644",
+      "original_path": "apps/scan-web/vendor/LICENSE-qrcode-generator.txt"
+    },
+    {
+      "path": "source/apps/scan-web/vendor/jsQR.js",
+      "sha256": "bc40c8a15196236b2314db0856f72ca0b49980cd5413b8c852a7349f5fee0859",
+      "git_blob": "429896a9d087eb3977cf67521f738d01af17c808",
+      "bytes": 256885,
+      "mode": "100644",
+      "original_path": "apps/scan-web/vendor/jsQR.js"
+    },
+    {
+      "path": "source/apps/scan-web/vendor/qrcode.js",
+      "sha256": "79ec86f82856005b1c887905cfccfcfbec3821ca61c7fd5a952faa5f778f791c",
+      "git_blob": "df13f829bf41f36b82f0ed85751ed3b4c39cfeb8",
+      "bytes": 56694,
+      "mode": "100644",
+      "original_path": "apps/scan-web/vendor/qrcode.js"
+    },
+    {
+      "path": "source/compose.yaml",
+      "sha256": "16c4e9d34e8d54b088e8bbde7d3f7e1098826f2d80f55e12f763ecd3db2b2693",
+      "git_blob": "4472fc010516c94d749ed41f1f59e99636a8927d",
+      "bytes": 2296,
+      "mode": "100644",
+      "original_path": "compose.yaml"
+    },
+    {
+      "path": "source/deploy/.env.production.example",
+      "sha256": "c37f982247079cfd2dbdbb991bab9ef547be70e8208e3cf487bce075b7ef6a8c",
+      "git_blob": "a97cae9bcab0380fcab5a12a25bf736a34bcbb38",
+      "bytes": 963,
+      "mode": "100644",
+      "original_path": "deploy/.env.production.example"
+    },
+    {
+      "path": "source/deploy/README.md",
+      "sha256": "3551ac4a463daa835e63afcbea2c924a23ab3ae22a8da71013d5e8c281d7a947",
+      "git_blob": "937a398c440e975604910491b827d5999928ec60",
+      "bytes": 5925,
+      "mode": "100644",
+      "original_path": "deploy/README.md"
+    },
+    {
+      "path": "source/deploy/backup-postgres.ps1",
+      "sha256": "c23523bbe1c7be002666b99e7d931e417337ed431e12f83ef8136ba02a3aa5d8",
+      "git_blob": "40ee779b3a127daf9c646d3863d77c55cd3eaf5b",
+      "bytes": 1379,
+      "mode": "100644",
+      "original_path": "deploy/backup-postgres.ps1"
+    },
+    {
+      "path": "source/deploy/backup-postgres.sh",
+      "sha256": "8fc6aed313a73ded5659a4213c4446062e38757ffc8d180d73253464a34c274d",
+      "git_blob": "3b9d4af221bd51f16b908b24fced140fc9b2f26e",
+      "bytes": 1306,
+      "mode": "100755",
+      "original_path": "deploy/backup-postgres.sh"
+    },
+    {
+      "path": "source/deploy/capacity-baseline.mjs",
+      "sha256": "e2ec8e1194e6f731015753e117ed18858168e374115b9fc4b47a89339752a407",
+      "git_blob": "6787150d2b9f2440a7cf77e3f020c04961c850c3",
+      "bytes": 2261,
+      "mode": "100644",
+      "original_path": "deploy/capacity-baseline.mjs"
+    },
+    {
+      "path": "source/deploy/compose.production.yaml",
+      "sha256": "883bc7e709b356c8a6f37f2b35bdafb182fac1c91c5568cf575b2315cc3aa295",
+      "git_blob": "6f91d3eea9660f3d9b5b5ae5c070803db2bd5f32",
+      "bytes": 5388,
+      "mode": "100644",
+      "original_path": "deploy/compose.production.yaml"
+    },
+    {
+      "path": "source/deploy/nginx/reliacode-api.conf.example",
+      "sha256": "4e587ed5ac136546bb4a57cbf94791df8b87129650480f104985197792365506",
+      "git_blob": "d34ed4b961cbbc4b8654a25ee46b4166449bf9f3",
+      "bytes": 1210,
+      "mode": "100644",
+      "original_path": "deploy/nginx/reliacode-api.conf.example"
+    },
+    {
+      "path": "source/deploy/ops-health.ps1",
+      "sha256": "830da7f2a6496df8bc0299bc2e1727497a863fbbb7e258e13204ff07315e46ff",
+      "git_blob": "9b27c78f994dcdd31cb6e420b3830c75ab551acd",
+      "bytes": 795,
+      "mode": "100644",
+      "original_path": "deploy/ops-health.ps1"
+    },
+    {
+      "path": "source/deploy/release.sh",
+      "sha256": "758637d7290008b94ce5a99fceb1b9b78cc1e6b33c13438f440ebcb8d419c146",
+      "git_blob": "9aac40bf2121f3eff9854de306bfa200fb99423d",
+      "bytes": 1254,
+      "mode": "100755",
+      "original_path": "deploy/release.sh"
+    },
+    {
+      "path": "source/deploy/restore-drill.sh",
+      "sha256": "c4013f52805b33ee01263df78b24245c7ac187591e145780e019221ad433027c",
+      "git_blob": "82d327c0c0c4c565bea52859bfdb87a6558efe0d",
+      "bytes": 1148,
+      "mode": "100755",
+      "original_path": "deploy/restore-drill.sh"
+    },
+    {
+      "path": "source/deploy/verify-backup.ps1",
+      "sha256": "7ef1fccc9b4393423b7a9ad4a4959178fbd494c698103aaf2d2adce094e0de8a",
+      "git_blob": "070fe3b621c02afcb591e05d63ca4ef627f2d4b7",
+      "bytes": 1235,
+      "mode": "100644",
+      "original_path": "deploy/verify-backup.ps1"
+    },
+    {
+      "path": "source/docs/adr/0001-openepcis-as-traceability-core.md",
+      "sha256": "b1c36e2068e0c4652d1c8e61161736487da0367b8133651e3c69daa5e7acb6d1",
+      "git_blob": "27546e56ce6b5399620430d97621106d137b63ef",
+      "bytes": 798,
+      "mode": "100644",
+      "original_path": "docs/adr/0001-openepcis-as-traceability-core.md"
+    },
+    {
+      "path": "source/docs/adr/0002-incentive-ledger-is-separate-from-trace-events.md",
+      "sha256": "72c01c5d6abc75b52c6d8c738eaff6961a25f8f7ff16ba3b308f9b5e9fe3e007",
+      "git_blob": "fe710b9dbb6e1e5b48a7340b6b8599f90087ff9a",
+      "bytes": 869,
+      "mode": "100644",
+      "original_path": "docs/adr/0002-incentive-ledger-is-separate-from-trace-events.md"
+    },
+    {
+      "path": "source/docs/agent-operation-model.md",
+      "sha256": "455a1c72b970021824f176fd83b9002f1b80929cf3c7cb8a0609f03cafd04fc5",
+      "git_blob": "e3947e581a5ef7cf5f48a50e917c7e54d91b59ad",
+      "bytes": 4844,
+      "mode": "100644",
+      "original_path": "docs/agent-operation-model.md"
+    },
+    {
+      "path": "source/docs/architecture.md",
+      "sha256": "5b4e608b7f9f13c7c280289ef4eba5886e996c79faec9b16a267ee6d812a3f15",
+      "git_blob": "28c937fecb48000f1b7c8f9d313fa8467d3fd222",
+      "bytes": 1987,
+      "mode": "100644",
+      "original_path": "docs/architecture.md"
+    },
+    {
+      "path": "source/docs/container-security-exceptions.md",
+      "sha256": "948f61fd779770590ced239f0fdd0a736e2b7fde12a94bd0d979337034dc91df",
+      "git_blob": "9a512d75e13f3c94befcf12a68e9be69140b13b5",
+      "bytes": 1061,
+      "mode": "100644",
+      "original_path": "docs/container-security-exceptions.md"
+    },
+    {
+      "path": "source/docs/design/README.md",
+      "sha256": "6f5f79a1f326b21c7b3446a5d30937fa871c497177fd80960b7aa7cafd458977",
+      "git_blob": "e7eb2cc372d674398454e0eff6a3fb0e4c4b71f9",
+      "bytes": 605,
+      "mode": "100644",
+      "original_path": "docs/design/README.md"
+    },
+    {
+      "path": "source/docs/domain/scan-incentive.md",
+      "sha256": "cc8bd595d43189ab21647c101679487fde6c037e8cdf77c02a9ce1417be14618",
+      "git_blob": "1bc27202a425aea58c44ae9ae35e345772833b03",
+      "bytes": 4892,
+      "mode": "100644",
+      "original_path": "docs/domain/scan-incentive.md"
+    },
+    {
+      "path": "source/docs/https-edge-runbook.md",
+      "sha256": "6cc2dfe5828c84e7d80f2b5b6c91aa54e6308261510683d598302baff6ca42c3",
+      "git_blob": "f191607ac06eda951d01a9dcc0ec8fed14317181",
+      "bytes": 1855,
+      "mode": "100644",
+      "original_path": "docs/https-edge-runbook.md"
+    },
+    {
+      "path": "source/docs/local-persistence-runbook.md",
+      "sha256": "98d766bb5e302371f2a56b2788b1be19f0117663a88d3b7ac9c3582814ffa005",
+      "git_blob": "d3b91ed41a0c8f777e627b1f7558599461c9a6bc",
+      "bytes": 2527,
+      "mode": "100644",
+      "original_path": "docs/local-persistence-runbook.md"
+    },
+    {
+      "path": "source/docs/operations-runbook.md",
+      "sha256": "43d3dc887cf6d149ce4cee3a3e7557e0778e30343d57037ec1ea4401e8d5174f",
+      "git_blob": "9acf6e12e06f2703353ca6cb53652b1e12c544b1",
+      "bytes": 2046,
+      "mode": "100644",
+      "original_path": "docs/operations-runbook.md"
+    },
+    {
+      "path": "source/docs/production-operations.md",
+      "sha256": "585509e9fa48493407af190bf656658ef449eec06a9f9c432874779eff46e549",
+      "git_blob": "9fbcbc3614889aa6ca890b7b2ca9c388c0bb1ccc",
+      "bytes": 3789,
+      "mode": "100644",
+      "original_path": "docs/production-operations.md"
+    },
+    {
+      "path": "source/docs/production-readiness.md",
+      "sha256": "bacd7ad73fedcf083faeb5ff0fc57ea0d76aa9f3c5bcc22bb17f9f6ffa9c2e9d",
+      "git_blob": "6190795e710159c9054d24c6ac10b880d347e5ae",
+      "bytes": 7009,
+      "mode": "100644",
+      "original_path": "docs/production-readiness.md"
+    },
+    {
+      "path": "source/docs/role-event-model.md",
+      "sha256": "6884b2baa0559cb337c68c9bfe6a25360ca0de2034c513921be045246a6e8109",
+      "git_blob": "e4c970f5ee72d98535e1b1e9b5103cd908ee86f1",
+      "bytes": 4927,
+      "mode": "100644",
+      "original_path": "docs/role-event-model.md"
+    },
+    {
+      "path": "source/docs/tenant-capacity.md",
+      "sha256": "b7a9e1578792fc3bc3204a674dd364d7285c84a886d02572b3a1580677969e6f",
+      "git_blob": "663126a70d9178cf7a6ea1f289e7f3aa28817d29",
+      "bytes": 862,
+      "mode": "100644",
+      "original_path": "docs/tenant-capacity.md"
+    },
+    {
+      "path": "source/docs/tenant-storage-policy.md",
+      "sha256": "709d22e8809b057eb8c26a4117938a6b7d3533c7526126296ae2d71876d8d628",
+      "git_blob": "b06a390f270e2ae287d69a72e26aa3263410d9ec",
+      "bytes": 792,
+      "mode": "100644",
+      "original_path": "docs/tenant-storage-policy.md"
+    },
+    {
+      "path": "source/docs/zh-CN/可靠码使用与奖励模式-行业评审稿.md",
+      "sha256": "6fe0a179c878e6358b902e318e01cd0b0200d1ddf1a88c7e9f6855ea97b9b42b",
+      "git_blob": "9ceee171683e7ecdfbd39f3647041ad3422ceec9",
+      "bytes": 11655,
+      "mode": "100644",
+      "original_path": "docs/zh-CN/可靠码使用与奖励模式-行业评审稿.md"
+    },
+    {
+      "path": "source/package-lock.json",
+      "sha256": "48b948134555e4c7e0bb92a38f79f76369cec178120938924eb3ad7d63e51089",
+      "git_blob": "b42ad954c0e333bf62ee67c5e3f804a8ce5ffb41",
+      "bytes": 54159,
+      "mode": "100644",
+      "original_path": "package-lock.json"
+    },
+    {
+      "path": "source/package.json",
+      "sha256": "06e2e8aa8845929b04f5d811db0d29363b0901c773f3515b4549dd0a91a68309",
+      "git_blob": "f05b38c2006bda654ed6a043560b3dad52947989",
+      "bytes": 405,
+      "mode": "100644",
+      "original_path": "package.json"
+    },
+    {
+      "path": "source/server-snapshots/20260916/README.md",
+      "sha256": "b2f8716fdf3d7daa0bf4c3ef3a8e5c7e726853bbf99878bc6d17311a38fb531b",
+      "git_blob": "af68e6c12941acb0a332e93467610145db61b13c",
+      "bytes": 2901,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260916/README.md"
+    },
+    {
+      "path": "source/server-snapshots/20260916/traceability-system/server.idempotency.patch",
+      "sha256": "f19ec8351c4bed326f1a95849d671381a9bf0f5aad4795adfe1364a019da93ed",
+      "git_blob": "5331980c5d578a0833559bf68c182cc197daf006",
+      "bytes": 4609,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260916/traceability-system/server.idempotency.patch"
+    },
+    {
+      "path": "source/server-snapshots/20260916/traceability-system/views/downloads.ejs",
+      "sha256": "a63120cf98cd2826a57c2c3e0955f2ff4951edfb5c55ed745af877ca6fc5dbd8",
+      "git_blob": "041d95009d747e2ef3e001925da29469f2ea1efe",
+      "bytes": 20576,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260916/traceability-system/views/downloads.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/.gitignore",
+      "sha256": "2755611b405defde6b1e5c46c7560a46820f5f64c34f4a6efd0f336072297abc",
+      "git_blob": "6ff4ca1b56c7dd9e41d0e07c497278a4380b34e3",
+      "bytes": 102,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/.gitignore"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/README.md",
+      "sha256": "955266a5e79fff29e2fdfc0c71dee37c83dbcca05400f7b5404f42783697a369",
+      "git_blob": "e9679535299996ad6ed1644040c17c91fde75d38",
+      "bytes": 1611,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/README.md"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/SHA256SUMS.txt",
+      "sha256": "15c3cfd53fe7e6716b6226da40efd3a49f962661de3831a4060ab52ba6d78727",
+      "git_blob": "9e81a1e7c82d567c5c6499700bc8e2631ca040d7",
+      "bytes": 3879,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/SHA256SUMS.txt"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/database.js",
+      "sha256": "780af420a34431760b49c6e05a8627b6ba69e1c804677da436613a81376559d9",
+      "git_blob": "33bf88c264b797589b54af3a2cea30ea536ef963",
+      "bytes": 41469,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/database.js"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/package-lock.json",
+      "sha256": "f93241ade81fddd3cc40a914969c282a8fbd1bdb06bf6698220b1c390900f284",
+      "git_blob": "2d018a41f96ad9c1bf76f5f839f5d1099a98326d",
+      "bytes": 115550,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/package-lock.json"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/package.json",
+      "sha256": "bf26684b96ba313dfd89402c7cf3513c74f218f5003851fadd5c1de0815dcc45",
+      "git_blob": "460e5ed6834455a35cc84b2a1c91a3ccb8b5e85f",
+      "bytes": 592,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/package.json"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/public/css/clawmaster.css",
+      "sha256": "baf3807b1d073174373f5863ae41e25d9d8c2ab7ec34af177f9940310dc69bf5",
+      "git_blob": "fc65af895330720d37c3fb3ab6d3ed00c15a5fed",
+      "bytes": 20148,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/public/css/clawmaster.css"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/public/css/style.css",
+      "sha256": "579eae2c2741aeb213ab7cadf442517d6c4eedfa518d20d52ecb0b277af2a03e",
+      "git_blob": "498b2fcc021de163baf6968da002db7e7956be58",
+      "bytes": 48221,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/public/css/style.css"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/public/css/workflow-layout.css",
+      "sha256": "19807181f01baacef491e35707ce3e04670d34d2ff6bab5a71e704b5cdd26adc",
+      "git_blob": "fc69f531f674636570cc59dc90abe784308d4ae0",
+      "bytes": 9736,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/public/css/workflow-layout.css"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/public/js/readonly-ui.js",
+      "sha256": "1384d9f2bc6f526ccdd786b2b0f52915cbe36d6096203f9a7b387a2fc32cff26",
+      "git_blob": "d58df2628a48b0238275aabf3547fe8f90cf06f4",
+      "bytes": 3762,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/public/js/readonly-ui.js"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/public/js/scanner.js",
+      "sha256": "f010042e4b1ada4e9676dbe1cf65c54ae37371383a97df415b5a5c912daef049",
+      "git_blob": "ab66a237900a81c696369f421c8f0186ebdc60b6",
+      "bytes": 13145,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/public/js/scanner.js"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/readonly-access.cjs",
+      "sha256": "77a098a7568c291b2a68c858c3e33fa0192b314e9e7bcb061f7508ffa7750b2c",
+      "git_blob": "c656f3d37104dca8fe090a8f19af6b14f4d16ddb",
+      "bytes": 1052,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/readonly-access.cjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/receipt-integrity.cjs",
+      "sha256": "acbd775d0ef102fcbffa8484e1f63f2cc7863f2ddd78c8510630251012bdf716",
+      "git_blob": "89abc232dc32dbe651da9837bdf375fb2d55ffb8",
+      "bytes": 6300,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/receipt-integrity.cjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/region-catalog.js",
+      "sha256": "77a6ec8eecf1cd6de5330616109b093698a3ea201408ddcb15381403262debab",
+      "git_blob": "a4972013f0f5833612f9d1fb012e1564cff060fd",
+      "bytes": 1181,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/region-catalog.js"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/server.js",
+      "sha256": "1e6205115443985d090efef98468bd9998209693d70071aa26de4ddd68878e53",
+      "git_blob": "428f65c8c15ef24beb6f70d66b12f14d174cf9f7",
+      "bytes": 357263,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/server.js"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/sqlite-session-store.js",
+      "sha256": "c402fb788758a147af712ee5e988a254b8871f1a88a4b4a010c12e87ebeb89f6",
+      "git_blob": "d1547f5f451f9194e1103562c9ec66c0cff03c64",
+      "bytes": 2165,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/sqlite-session-store.js"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/tests/bound-child-shipment-stage-acceptance.mjs",
+      "sha256": "41de2b9324b323b95c45d01e81ea6e808a655bb88c16b653f6a096816e6d151e",
+      "git_blob": "e06041d2b4d16898cb077ae1d1dc034ff85f09fb",
+      "bytes": 5918,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/tests/bound-child-shipment-stage-acceptance.mjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/tests/code-package-candidate-acceptance.mjs",
+      "sha256": "0b85afd449cec8d277f5625a75a37210d26d7cd0c6b0688035fb49499f542305",
+      "git_blob": "2dc259f58766573e9ac0b829ae835df148fb0c13",
+      "bytes": 5044,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/tests/code-package-candidate-acceptance.mjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/tests/code-package-production.test.mjs",
+      "sha256": "472d55742ba200c4f219bde821df1fec8c4fd2dd4582640b37da11373dab9794",
+      "git_blob": "a01c44d1532c01e1337498bd9abfd18bcdbca99a",
+      "bytes": 3099,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/tests/code-package-production.test.mjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/tests/download-center-log-permission.test.mjs",
+      "sha256": "ee61f91effd45e2a582b3ee4e2843d99be26942c64b16d50d4ceab95a132125c",
+      "git_blob": "39d2d7765fa8449d35b4207d576fee4a2da4fe89",
+      "bytes": 1471,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/tests/download-center-log-permission.test.mjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/tests/factory-pending-brand-acceptance.mjs",
+      "sha256": "d8d83ef94fe689fa6ca4b783dd4bd6a0b2e5c340c673b4d82d7c0f089c802778",
+      "git_blob": "f506667c707ddd3ad1d5daca3503420a1eb40ec0",
+      "bytes": 5578,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/tests/factory-pending-brand-acceptance.mjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/tests/image-archive-guard.test.mjs",
+      "sha256": "2358541cf3fb0aada5a9e5b2794e68c7e633c568bec4739a7c151ae783ce0221",
+      "git_blob": "033660c4d9bb068d4ab52805322dcbcc27507c44",
+      "bytes": 2266,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/tests/image-archive-guard.test.mjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/tests/multi-factory-boundaries.test.mjs",
+      "sha256": "2b2b75f9e7b2291d95517b610d8eb55e625970678c008561cf71c5af97c01253",
+      "git_blob": "0084c30e797daecc114dbd9c7d16444caca26938",
+      "bytes": 13750,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/tests/multi-factory-boundaries.test.mjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/tests/nobox-pending-stage-acceptance.mjs",
+      "sha256": "4d563250afcf6ea5d56b8ce313d060cf6421cf0b8677f38b359649ebe294173b",
+      "git_blob": "1a04883c45a68c35033c069d05de524ef9b8b7b8",
+      "bytes": 5476,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/tests/nobox-pending-stage-acceptance.mjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/tests/product-multi-factory.test.mjs",
+      "sha256": "69d48adbc3fa2a07aa2ac0f729fb28d47783f965313ffdd5ab061c5eb98bee19",
+      "git_blob": "d1ccc2dafa74367ef8c32db844b7def55150b88d",
+      "bytes": 2612,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/tests/product-multi-factory.test.mjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/tests/reversal-retry-stage-acceptance.mjs",
+      "sha256": "43efe4ecf598de0b47b1cce3c6e8739787b9b0bfc33525b02c34ed3c359527f0",
+      "git_blob": "1517b532d0ba6a2bac956c55562fa988d9afa64e",
+      "bytes": 5280,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/tests/reversal-retry-stage-acceptance.mjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/tests/reversal-retry.test.mjs",
+      "sha256": "4baf30e01cf2da120d638ac52c5be558ac27b0cf428d6fddee903e7859c1c3df",
+      "git_blob": "c9f3d600a5803e4303c377904bae6e6d915de683",
+      "bytes": 3355,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/tests/reversal-retry.test.mjs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/admin-business.ejs",
+      "sha256": "71a330e79ec470811c8752f9e9e2800f87eb06a62c1b6a4f3fed477abf20a63f",
+      "git_blob": "b3fca2158d90561e4aae6d674474b03c02718f28",
+      "bytes": 2155,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/admin-business.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/admin-me.ejs",
+      "sha256": "3386b03f92036d1c291ac3e9ab587f918ecbc9452baa933bc7047d0139f73d8b",
+      "git_blob": "70aedaf81255039ded6710ea125aeda2ca8b56e2",
+      "bytes": 3140,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/admin-me.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/admin.ejs",
+      "sha256": "723ba3908ace438e96b5f48df444167a07141e5d4bb3b9e39dae585e076e1bb7",
+      "git_blob": "b3bf429bb454e465d916771be9306ec14b049c9f",
+      "bytes": 9232,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/admin.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/alerts.ejs",
+      "sha256": "00eb2bf71f0ed7f528793fe2879cce9368ac624887cf679ebe50f26b5abfbb4e",
+      "git_blob": "5227dda6c1cc57a52cce2a3745a6ccc420d36af2",
+      "bytes": 8087,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/alerts.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/brand-check.ejs",
+      "sha256": "3bf897377f101295d3005b662d93b1ba7c26366e170df059b317c9763de03291",
+      "git_blob": "a3cc620bc65f803f1f97e64c83d4055ae138141b",
+      "bytes": 8028,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/brand-check.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/codes.ejs",
+      "sha256": "3bc542e5cc92c29db23c41614a67fc2160619016ecf487499f5db26728de8c53",
+      "git_blob": "67b62ffed27a558ed969f5a5ea40cb3b8afbc187",
+      "bytes": 23237,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/codes.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/distributors.ejs",
+      "sha256": "b325f5ae5ead1b610b17bc4798e6bd3168301daadbf8407760b3d0a0d9e3ec87",
+      "git_blob": "038bf2011c6d20d163a468e49cb9e64ce0c77fee",
+      "bytes": 12586,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/distributors.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/downloads.ejs",
+      "sha256": "6a9660a7d516c86627ec56d8040ffebdb78a79e242bd704a881eb7415b57d57d",
+      "git_blob": "e19d3faa225dd15578d1aa50b2cebe791af84f67",
+      "bytes": 23982,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/downloads.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/factory.ejs",
+      "sha256": "f40fa69676309aa8f84c7144a0024faf377211bc8adaf10b47a508bad6ceb9ac",
+      "git_blob": "2717e64db5f9594f662867dd2a37ede568e15518",
+      "bytes": 69924,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/factory.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/generate.ejs",
+      "sha256": "ba4f3aa0c09e0507a563df7abb97bdba223193df50196b91124992e7048d0fe7",
+      "git_blob": "ff09971ec4d7305f9477cc895d5e3c025d49d6aa",
+      "bytes": 73089,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/generate.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/login.ejs",
+      "sha256": "9ddadd6c5b9a17e03db62cfe5e2494c95c250f4a281881556c6f36d675a643b8",
+      "git_blob": "b3b5cb9d43e70edbfc9de710f7fa1fb74e2269d0",
+      "bytes": 11250,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/login.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/logs.ejs",
+      "sha256": "11f0417c04b8fe2fef51ddb25e5e05c64cb7d5f16f37d7d8caad7d4c5ec5b00d",
+      "git_blob": "5feaec5472237e2c8a85a67b622f5be6f1dee9ee",
+      "bytes": 6642,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/logs.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/partials/back-button.ejs",
+      "sha256": "60a5f10840af87d6b33e8a646674674c4abcee5c9b5e55244c346d3797fedeb3",
+      "git_blob": "af16b4d512e1368b64d5f27d6a28cfd6e30837af",
+      "bytes": 1997,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/partials/back-button.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/partials/boot-head.ejs",
+      "sha256": "fe9cd098da6dcd3bae0517586078bd1d04c608d947df5f75cac14cdd11c6b85e",
+      "git_blob": "9dd0af0b82a7181d9f214a14a2cb130564e6c0fd",
+      "bytes": 3516,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/partials/boot-head.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/partials/boot-loader.ejs",
+      "sha256": "968e3e36041cc9364e16a6e2904a318c58bb184d876a4342ecddf7654a13bab0",
+      "git_blob": "b6f1a3625a7772395a816df5820d23ca3037cc1f",
+      "bytes": 26257,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/partials/boot-loader.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/partials/bottom-nav.ejs",
+      "sha256": "f452579870b5f90534882a080dffe327d1a5300bdecc0cd293b71886772ee0fa",
+      "git_blob": "b391442c961bd05fb326477117ad83d398a24cdb",
+      "bytes": 2022,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/partials/bottom-nav.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/partials/nav.ejs",
+      "sha256": "b651cd2d90deb88cdebff19a3d7ba9f1a5d124ff36ca436a4b6a0daf3b9ab70c",
+      "git_blob": "25ba890ee3b19151ec25966219a11f075e91be71",
+      "bytes": 6443,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/partials/nav.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/portal.ejs",
+      "sha256": "3cb4ffcf7f954e44b9b031bea91664e16d1096eb26493306833e59be0e157f2e",
+      "git_blob": "84feea4c62ece59f7a2bbf72f8084a344b0802ca",
+      "bytes": 3788,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/portal.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/print.ejs",
+      "sha256": "18e2afac62e04bfbff7ba7550e5c6632f47d651335e74ebb53479c3859824ce2",
+      "git_blob": "206d32d48117e487ec8036ceed5f755c31a7e9d1",
+      "bytes": 4082,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/print.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/profile.ejs",
+      "sha256": "903df0332cc53406807d025e56e0fa87d020c2fdf3b15e73a75f9062d137d8f8",
+      "git_blob": "0fd508c603d3e953db45961d99e28e2d0843d750",
+      "bytes": 7132,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/profile.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/register.ejs",
+      "sha256": "ecd11a5ee3ff52fc921dbb316c05a7bcb3ea4a3ce74a8dd53f17b8741c208aea",
+      "git_blob": "0bf9442b661b009afe91f8a7406793af75b4a578",
+      "bytes": 7622,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/register.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/settings.ejs",
+      "sha256": "a91687235c01381fe730dba0de2d5ee97f8b9d972f821819b958aff0ad0799eb",
+      "git_blob": "45cd52bc162754a0ad387dd391203b686d20539c",
+      "bytes": 21538,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/settings.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/users.ejs",
+      "sha256": "35b9fa6c85865c8b672f2074a66447cdb3ee5195debe3bfd3f3d929182f22c8b",
+      "git_blob": "0153e5237185030d8cbbae5128ac918392638861",
+      "bytes": 35250,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/users.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/verify.ejs",
+      "sha256": "175f92d56bacbe268a062fdaf11f6fcca9b71f5054f040208ee4ba5c1126b44c",
+      "git_blob": "5fdaaaa4d2835db6a075ebaae2c333ddbae40b18",
+      "bytes": 21173,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/verify.ejs"
+    },
+    {
+      "path": "source/server-snapshots/20260917-production/views/warehouse.ejs",
+      "sha256": "7df3bfb45b4becd0d2fdf0f07471694bf58f9a9eeb9cf0d815c036a1717c0269",
+      "git_blob": "4bff53b20993ee6a77ae324821f712d98969c4db",
+      "bytes": 48516,
+      "mode": "100644",
+      "original_path": "server-snapshots/20260917-production/views/warehouse.ejs"
+    },
+    {
+      "path": "source/views/login.ejs",
+      "sha256": "ff071566dea16941b58aef0ae59fe77b03827c29e4fa671d0a2dbb33ce711225",
+      "git_blob": "9e8f2d9a4d4c6ac5f89bc9f2004020f48a1dc214",
+      "bytes": 11192,
+      "mode": "100644",
+      "original_path": "views/login.ejs"
+    },
+    {
+      "path": "source/views/partials/nav.ejs",
+      "sha256": "94d9849c6474aa043806e3160290966d9edcec814c9d3a17f31997484329b56b",
+      "git_blob": "72e78f2c4a09075c9c60e4f830d66ad8daa1dbd3",
+      "bytes": 6409,
+      "mode": "100644",
+      "original_path": "views/partials/nav.ejs"
+    },
+    {
+      "path": "source/views/print.ejs",
+      "sha256": "1267ea9c8bec70618e17e67823674d50063886f35182eebf80196ae01ba09e99",
+      "git_blob": "91acd2de9817bf8ad801bc2107da884d0c0b28b5",
+      "bytes": 4024,
+      "mode": "100644",
+      "original_path": "views/print.ejs"
+    },
+    {
+      "path": "source/views/register.ejs",
+      "sha256": "62f90507fcf3a98c691e4884b750aabb88c9928b6711239d95739d7764dc66b1",
+      "git_blob": "7075e0f64720abb269e13a9e2b9bd6f6dbad1837",
+      "bytes": 7564,
+      "mode": "100644",
+      "original_path": "views/register.ejs"
+    },
+    {
+      "path": "source/views/verify.ejs",
+      "sha256": "0614b42cb12f591292b69f3bdc24a3eb38581980555541133b5e805a096a7305",
+      "git_blob": "f5e406aaa09d3c6d680dc7282b0310405e1e724c",
+      "bytes": 21115,
+      "mode": "100644",
+      "original_path": "views/verify.ejs"
+    }
+  ],
+  "excluded_counts": {
+    "local-evidence-or-business-data": 1
+  },
+  "history": {
+    "available": true,
+    "refs": [
+      "ba60fdbf28115cf1211514005d632fc86853e400 refs/heads/main",
+      "0dae76376a53f282ef6d1f0fddc6030beda4316e refs/local-backup-reflog/000000",
+      "117b520541c788f1034101894ce497c996ef61eb refs/local-backup-reflog/000001",
+      "32de9118d3e9400e21f0d067386ef6220eab58b3 refs/local-backup-reflog/000002",
+      "482ae6f2be12cb75ed0ba238237bf8c9bc924b97 refs/local-backup-reflog/000003",
+      "49f7861bf0442d030466535424835713703e8edc refs/local-backup-reflog/000004",
+      "ba60fdbf28115cf1211514005d632fc86853e400 refs/local-backup-reflog/000005",
+      "c5ba34c39474c2dee129ac1eb9de8c69e6523753 refs/local-backup-reflog/000006",
+      "db9ba359278872a60e8f83903c85103cf125da01 refs/local-backup-reflog/000007",
+      "c5ba34c39474c2dee129ac1eb9de8c69e6523753 refs/remotes/origin/HEAD",
+      "c5ba34c39474c2dee129ac1eb9de8c69e6523753 refs/remotes/origin/main",
+      "ba60fdbf28115cf1211514005d632fc86853e400 HEAD"
+    ],
+    "reflog_commit_count": 8
+  },
+  "history_parts": [
+    {
+      "path": "history/history.bundle.part0000",
+      "sha256": "9e77dd09b8d8818ad208fbe3ac865d8266f4a0a36f414f1593970b124ec181d3",
+      "git_blob": "6ef2d5a336c2426a541ea209e018250e9d345e6f",
+      "bytes": 2450795
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import Fastify from "fastify";
+import { registerRecoveryRoutes } from "../src/recovery-routes.mjs";
+
+const config={emailDeliveryConfigured:true};
+function appFor(db,deliveries){const app=Fastify({logger:false});registerRecoveryRoutes(app,{db,config,emailDeliveryFactory:()=>({async sendAccountLink(value){deliveries.push(value);},close(){}})});return app;}
+
+test("password recovery response is enumeration-resistant and persists only a token hash",async t=>{const inserted=[],deliveries=[],knownDb={query:async(sql,params=[])=>{if(sql.includes("FROM local_users"))return{rowCount:1,rows:[{id:"11111111-1111-4111-8111-111111111111",email:"owner@example.cn",email_verified_at:"2026-08-28T00:00:00Z"}]};if(sql.includes("SELECT requested_at"))return{rowCount:0,rows:[]};if(sql.includes("INSERT INTO local_account_tokens")){inserted.push(params);return{rowCount:1,rows:[]};}throw new Error(`Unexpected SQL: ${sql}`);}},known=appFor(knownDb,deliveries);t.after(()=>known.close());const knownResponse=await known.inject({method:"POST",url:"/api/auth/password-reset/request",payload:{email:"owner@example.cn"}});assert.equal(knownResponse.statusCode,202);assert.equal(deliveries.length,1);assert.equal(inserted[0].includes(deliveries[0].token),false);assert.match(inserted[0][3],/^[a-f0-9]{64}$/);const unknownDeliveries=[],unknown=appFor({query:async sql=>sql.includes("FROM local_users")?{rowCount:0,rows:[]}:{rowCount:0,rows:[]}},unknownDeliveries);t.after(()=>unknown.close());const unknownResponse=await unknown.inject({method:"POST",url:"/api/auth/password-reset/request",payload:{email:"missing@example.cn"}});assert.equal(unknownResponse.statusCode,knownResponse.statusCode);assert.deepEqual(unknownResponse.json(),knownResponse.json());assert.equal(unknownDeliveries.length,0);});

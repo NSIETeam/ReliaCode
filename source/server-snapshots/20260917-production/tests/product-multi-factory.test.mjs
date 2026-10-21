@@ -1,0 +1,47 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+
+const root = path.resolve(import.meta.dirname, '..');
+const read = file => fs.readFileSync(path.join(root, file), 'utf8');
+
+test('product factories use an idempotent many-to-many schema with legacy backfill', () => {
+  const database = read('database.js');
+  assert.match(database, /CREATE TABLE IF NOT EXISTS product_factories/);
+  assert.match(database, /PRIMARY KEY \(product_id, factory_id\)/);
+  assert.match(database, /FOREIGN KEY \(product_id\) REFERENCES products\(id\) ON DELETE CASCADE/);
+  assert.match(database, /INSERT OR IGNORE INTO product_factories \(product_id, factory_id\) \$\{backfillRowSql\}/);
+  assert.match(database, /CREATE TABLE IF NOT EXISTS factory_brands/);
+  assert.match(database, /product_factories_brand_guard_insert/);
+  assert.match(database, /PRODUCT_FACTORY_BRAND_CONFLICT/);
+});
+
+test('product create, update and factory visibility use all selected factories', () => {
+  const server = read('server.js');
+  assert.match(server, /normalizedFactoryIds\(req\.body\)/);
+  assert.match(server, /replaceProductFactories\(created\.lastInsertRowid, factoryIds\)/);
+  assert.match(server, /replaceProductFactories\(product\.id, factoryIds\)/);
+  assert.match(server, /EXISTS \(SELECT 1 FROM product_factories pf WHERE pf\.product_id=products\.id AND pf\.factory_id=\?\)/);
+  assert.match(server, /PRODUCT_FACTORY_FORBIDDEN/);
+  assert.match(server, /RECEIPT_FACTORY_FORBIDDEN/);
+  assert.match(server, /PRODUCT_FACTORY_HAS_ACTIVE_STOCK/);
+  assert.match(server, /FACTORY_HAS_ACTIVE_STOCK/);
+  assert.match(server, /factory_ids: rows\.map\(row => row\.id\)/);
+  assert.match(server, /withProductsFactories/);
+});
+
+test('product editor exposes discoverable multi-factory choices and submits an array', () => {
+  const view = read('views/generate.ejs');
+  const css = read('public/css/clawmaster.css');
+  assert.match(view, /<legend>归属工厂<\/legend>/);
+  assert.match(view, /type="checkbox" name="pFactoryChoice"/);
+  assert.match(view, /const factory_ids = selectedProductFactoryIds\(\)/);
+  assert.match(view, /JSON\.stringify\(\{name, spec, ena13, batch_no: '', box_size: boxSize, factory_id, factory_ids, brand_id/);
+  assert.match(view, /data-factories=/);
+  const factoryView = read('views/factory.ejs');
+  assert.match(factoryView, /<label class="text-13" for="selFactory">生产工厂/);
+  assert.match(factoryView, /operation_factory_id/);
+  assert.match(css, /\.product-factory-choices/);
+  assert.match(css, /\.product-factory-choice/);
+});
